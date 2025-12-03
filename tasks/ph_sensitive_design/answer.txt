@@ -1,0 +1,94 @@
+**pH-Sensitive Binder Design - Ground Truth Answers**
+
+## Part 0: Conceptual Understanding
+
+**Question 0.1**: B) His has a pKa (~6.0) near physiological/endosomal pH, allowing protonation state changes
+
+**Question 0.2**: B) His adjacent to Arg/Lys (positively charged residues)
+- At low pH, His becomes protonated (+1), causing electrostatic repulsion with nearby Arg/Lys (+1)
+
+**Question 0.3**: C) Buried in the protein core
+- Buried networks destabilize the monomer fold when His protonates at low pH
+
+**Question 0.4**: A) His-His, His-Arg, His-Lys networks
+- These polar/charged networks are disrupted by His protonation
+
+**Question 0.5**: B) His H-bond energy < -0.5 kcal/mol (favorable)
+- Networks must have sufficiently strong H-bonds to be functional at neutral pH
+
+---
+
+## Part 1: ProteinMPNN with Histidine Bias
+
+**Task 1.1**: The correct bias argument is:
+```
+--bias_AA "H:2.0"
+```
+
+**Task 1.2**: Position-specific bias dictionary:
+```python
+def create_his_bias_dict(positions, chain="A", his_bias=3.0):
+    bias_dict = {}
+    for pos in positions:
+        key = f"{chain}{pos}"
+        bias_dict[key] = {aa: (his_bias if aa == "H" else 0.0) for aa in AA_ALPHABET}
+    return bias_dict
+
+# Result for positions [10, 15, 22]:
+{
+    "A10": {"A": 0.0, "C": 0.0, ..., "H": 3.0, ..., "Y": 0.0},
+    "A15": {"A": 0.0, "C": 0.0, ..., "H": 3.0, ..., "Y": 0.0},
+    "A22": {"A": 0.0, "C": 0.0, ..., "H": 3.0, ..., "Y": 0.0}
+}
+```
+
+---
+
+## Part 2: Interface Destabilization Scoring (Strategy A)
+
+**Task 2.1**: His-cation motif detection requires:
+1. Identify His residues at interface (within 5Å of target)
+2. Find Arg/Lys residues within H-bond distance (3.5Å) of His ND1/NE2 atoms
+3. Valid pairs: His-Nδ1...Arg-Nη1/Nη2 or His-Nε2...Lys-Nζ
+
+**Task 2.2**: PyRosetta scoring pipeline:
+```python
+# Key steps:
+1. pose = pyrosetta.pose_from_pdb(pdb_path)
+2. sfxn = pyrosetta.get_fa_scorefxn()
+3. FastRelax().apply(pose)
+4. InterfaceAnalyzerMover("A_B").apply(pose)
+5. Extract: dG_separated, dSASA_int, fa_elec
+```
+
+**Task 2.3**: Filtering criteria:
+- Pass if: (num_his_cation_pairs >= 1) AND (ddG_elec >= 0)
+
+---
+
+## Part 3: Monomer Destabilization with HBNet (Strategy B)
+
+**Task 3.1**: Core residue identification:
+- Calculate relative SASA for each residue
+- Core = residues with relative SASA < 25%
+- Use FreeSASA or BioPython SASA module
+
+**Task 3.2**: HBNet configuration:
+```python
+# Key settings:
+- core_selector = ResidueIndexSelector(core_positions)
+- allowed_aas = "HRK"  # His, Arg, Lys
+- min_network_size = 2
+- require_his = True
+```
+
+**Task 3.3**: Scoring criterion:
+- His H-bond energy < -0.5 kcal/mol
+- Extract from HBondSet for each His in network
+
+**Task 3.4**: Complete pipeline:
+1. identify_core_residues() → core positions
+2. setup_hbnet_for_his_networks() → configured HBNet
+3. hbnet.apply(pose) → designs with networks
+4. score_hbnet_designs() → filtered candidates
+

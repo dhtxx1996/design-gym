@@ -1,0 +1,134 @@
+Total Points: 100
+
+Notes: This rubric evaluates understanding and implementation of pH-sensitive binder design workflows from Ahn et al. 2025. The task covers two strategies: (A) Interface Destabilization using His-cation pairs, and (B) Monomer Destabilization using buried His H-bond networks.
+
+Criteria (14):
+
+---
+PART 0: CONCEPTUAL UNDERSTANDING (15 points)
+---
+
+  Criterion 1: Histidine pKa Understanding (Q0.1)
+    Description: Correctly identifies why His is key for pH-sensitivity
+    Max Points: 3
+    Levels:
+      [A] (3 points): Correctly selects B - His pKa (~6.0) near physiological pH allows protonation state changes
+      [B] (1 point): Selects answer related to H-bonding but misses pKa reasoning
+      [C] (0 points): Incorrect answer
+
+  Criterion 2: Interface Destabilization Motif (Q0.2)
+    Description: Identifies correct residue pairs for Strategy A
+    Max Points: 3
+    Levels:
+      [A] (3 points): Correctly selects B - His adjacent to Arg/Lys (positively charged)
+      [B] (1 point): Mentions His but wrong partner residues
+      [C] (0 points): Incorrect answer
+
+  Criterion 3: Network Placement (Q0.3)
+    Description: Identifies where to place His networks for Strategy B
+    Max Points: 3
+    Levels:
+      [A] (3 points): Correctly selects C - Buried in protein core
+      [B] (1 point): Mentions structure but wrong location
+      [C] (0 points): Incorrect answer
+
+  Criterion 4: Network Types (Q0.4)
+    Description: Identifies valid network types for Strategy B
+    Max Points: 3
+    Levels:
+      [A] (3 points): Correctly selects A - His-His, His-Arg, His-Lys networks
+      [B] (1 point): Mentions His but incomplete network types
+      [C] (0 points): Incorrect answer
+
+  Criterion 5: Energy Threshold (Q0.5)
+    Description: Identifies correct His H-bond energy criterion
+    Max Points: 3
+    Levels:
+      [A] (3 points): Correctly selects B - His H-bond energy < -0.5 kcal/mol
+      [B] (1 point): Mentions energy but wrong threshold or direction
+      [C] (0 points): Incorrect answer
+
+---
+PART 1: PROTEINMPNN HISTIDINE BIAS (20 points)
+---
+
+  Criterion 6: Global Bias Argument (Task 1.1)
+    Description: Correctly writes ProteinMPNN bias argument
+    Max Points: 8
+    Levels:
+      [A] (8 points): Correct format: --bias_AA "H:2.0" (or equivalent valid syntax)
+      [B] (4 points): Correct flag name but wrong format or value
+      [C] (0 points): Wrong flag or completely incorrect syntax
+
+  Criterion 7: Position-Specific Bias Dictionary (Task 1.2)
+    Description: Creates correct per-residue bias JSON structure
+    Max Points: 12
+    Levels:
+      [A] (12 points): Correctly creates dictionary with: (1) chain+residue keys (e.g., "A10"), (2) all 20 amino acids, (3) His biased to 3.0, (4) others at 0.0
+      [B] (6 points): Correct structure but missing some amino acids or wrong bias values
+      [C] (0 points): Incorrect structure or does not implement function
+
+---
+PART 2: INTERFACE DESTABILIZATION SCORING (35 points)
+---
+
+  Criterion 8: His-Cation Motif Detection Logic (Task 2.1)
+    Description: Implements interface His-Arg/Lys detection
+    Max Points: 12
+    Levels:
+      [A] (12 points): Correctly implements: (1) interface residue identification (5Å cutoff), (2) His nitrogen atom identification (ND1, NE2), (3) distance to Arg/Lys cation atoms (< 3.5Å), (4) returns structured pair data
+      [B] (6 points): Partial implementation - identifies His or cations but not complete pair detection
+      [C] (0 points): Does not implement or fundamentally incorrect approach
+
+  Criterion 9: PyRosetta Scoring Pipeline (Task 2.2)
+    Description: Implements Rosetta scoring with correct components
+    Max Points: 12
+    Levels:
+      [A] (12 points): Correctly uses: (1) pose loading, (2) score function setup, (3) FastRelax, (4) InterfaceAnalyzerMover, (5) extracts dG_separated, dSASA_int, fa_elec
+      [B] (6 points): Uses PyRosetta correctly but missing some components (e.g., no FastRelax or incomplete metrics)
+      [C] (0 points): Does not use PyRosetta or fundamentally incorrect approach
+
+  Criterion 10: Filtering Pipeline Logic (Task 2.3)
+    Description: Combines motif and score filtering correctly
+    Max Points: 11
+    Levels:
+      [A] (11 points): Correctly implements both criteria: (1) min_his_cation_pairs >= 1, (2) ddG_elec >= 0, with proper AND logic
+      [B] (5 points): Implements one criterion correctly but not both
+      [C] (0 points): Does not implement filtering or incorrect logic
+
+---
+PART 3: MONOMER DESTABILIZATION WITH HBNET (30 points)
+---
+
+  Criterion 11: Core Residue Identification (Task 3.1)
+    Description: Implements SASA-based core detection
+    Max Points: 8
+    Levels:
+      [A] (8 points): Correctly implements: (1) per-residue SASA calculation, (2) relative SASA using max SASA values, (3) threshold comparison (< 25%)
+      [B] (4 points): Calculates SASA but wrong normalization or threshold
+      [C] (0 points): Does not implement or incorrect approach
+
+  Criterion 12: HBNet Configuration (Task 3.2)
+    Description: Configures HBNet for His-containing networks
+    Max Points: 8
+    Levels:
+      [A] (8 points): Correctly configures: (1) core position selector, (2) allowed amino acids (H, R, K), (3) minimum network size, (4) His requirement
+      [B] (4 points): Partial configuration - missing some settings
+      [C] (0 points): Does not configure HBNet or fundamentally incorrect
+
+  Criterion 13: Network Scoring (Task 3.3)
+    Description: Scores networks based on His H-bond energy
+    Max Points: 7
+    Levels:
+      [A] (7 points): Correctly implements: (1) HBondSet extraction, (2) His-specific H-bond identification, (3) energy summation, (4) threshold comparison (< -0.5 kcal/mol)
+      [B] (3 points): Extracts H-bonds but incorrect energy calculation or threshold
+      [C] (0 points): Does not implement scoring
+
+  Criterion 14: Complete Pipeline Integration (Task 3.4)
+    Description: Combines all steps into working pipeline
+    Max Points: 7
+    Levels:
+      [A] (7 points): Correctly chains all steps: (1) core identification, (2) HBNet setup, (3) apply to pose, (4) scoring and filtering, (5) output handling
+      [B] (3 points): Partially complete pipeline - missing some steps
+      [C] (0 points): Does not integrate or incomplete implementation
+
