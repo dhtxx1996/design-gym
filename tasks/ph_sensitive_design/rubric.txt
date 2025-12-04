@@ -2,10 +2,10 @@ Total Points: 100
 
 Notes: This rubric evaluates understanding and implementation of pH-sensitive binder design workflows from Ahn et al. 2025. The task covers two strategies: (A) Interface Destabilization using His-cation pairs, and (B) Monomer Destabilization using buried His H-bond networks.
 
-Criteria (14):
+Criteria (13):
 
 ---
-PART 0: CONCEPTUAL UNDERSTANDING (15 points)
+PART 0: CONCEPTUAL UNDERSTANDING (12 points)
 ---
 
   Criterion 1: Histidine pKa Understanding (Q0.1)
@@ -40,27 +40,19 @@ PART 0: CONCEPTUAL UNDERSTANDING (15 points)
       [B] (1 point): Mentions His but incomplete network types
       [C] (0 points): Incorrect answer
 
-  Criterion 5: Energy Threshold (Q0.5)
-    Description: Identifies correct His H-bond energy criterion
-    Max Points: 3
-    Levels:
-      [A] (3 points): Correctly selects B - His H-bond energy < -0.5 kcal/mol
-      [B] (1 point): Mentions energy but wrong threshold or direction
-      [C] (0 points): Incorrect answer
-
 ---
-PART 1: PROTEINMPNN HISTIDINE BIAS (20 points)
+PART 1: PROTEINMPNN HISTIDINE BIAS (23 points)
 ---
 
-  Criterion 6: Global Bias Argument (Task 1.1)
+  Criterion 5: Global Bias Argument (Task 1.1)
     Description: Correctly writes ProteinMPNN bias argument
-    Max Points: 8
+    Max Points: 11
     Levels:
-      [A] (8 points): Correct format: --bias_AA "H:2.0" (or equivalent valid syntax)
-      [B] (4 points): Correct flag name but wrong format or value
+      [A] (11 points): Correct format: --bias_AA "H:2.0" (or equivalent valid syntax)
+      [B] (5 points): Correct flag name but wrong format or value
       [C] (0 points): Wrong flag or completely incorrect syntax
 
-  Criterion 7: Position-Specific Bias Dictionary (Task 1.2)
+  Criterion 6: Position-Specific Bias Dictionary (Task 1.2)
     Description: Creates correct per-residue bias JSON structure
     Max Points: 12
     Levels:
@@ -72,7 +64,7 @@ PART 1: PROTEINMPNN HISTIDINE BIAS (20 points)
 PART 2: INTERFACE DESTABILIZATION SCORING (35 points)
 ---
 
-  Criterion 8: His-Cation Motif Detection Logic (Task 2.1)
+  Criterion 7: His-Cation Motif Detection Logic (Task 2.1)
     Description: Implements interface His-Arg/Lys detection
     Max Points: 12
     Levels:
@@ -80,7 +72,7 @@ PART 2: INTERFACE DESTABILIZATION SCORING (35 points)
       [B] (6 points): Partial implementation - identifies His or cations but not complete pair detection
       [C] (0 points): Does not implement or fundamentally incorrect approach
 
-  Criterion 9: PyRosetta Scoring Pipeline (Task 2.2)
+  Criterion 8: PyRosetta Scoring Pipeline (Task 2.2)
     Description: Implements Rosetta scoring with correct components
     Max Points: 12
     Levels:
@@ -88,7 +80,7 @@ PART 2: INTERFACE DESTABILIZATION SCORING (35 points)
       [B] (6 points): Uses PyRosetta correctly but missing some components (e.g., no FastRelax or incomplete metrics)
       [C] (0 points): Does not use PyRosetta or fundamentally incorrect approach
 
-  Criterion 10: Filtering Pipeline Logic (Task 2.3)
+  Criterion 9: Filtering Pipeline Logic (Task 2.3)
     Description: Combines motif and score filtering correctly
     Max Points: 11
     Levels:
@@ -100,7 +92,7 @@ PART 2: INTERFACE DESTABILIZATION SCORING (35 points)
 PART 3: MONOMER DESTABILIZATION WITH HBNET (30 points)
 ---
 
-  Criterion 11: Core Residue Identification (Task 3.1)
+  Criterion 10: Core Residue Identification (Task 3.1)
     Description: Implements SASA-based core detection
     Max Points: 8
     Levels:
@@ -108,7 +100,7 @@ PART 3: MONOMER DESTABILIZATION WITH HBNET (30 points)
       [B] (4 points): Calculates SASA but wrong normalization or threshold
       [C] (0 points): Does not implement or incorrect approach
 
-  Criterion 12: HBNet Configuration (Task 3.2)
+  Criterion 11: HBNet Configuration (Task 3.2)
     Description: Configures HBNet for His-containing networks
     Max Points: 8
     Levels:
@@ -116,7 +108,7 @@ PART 3: MONOMER DESTABILIZATION WITH HBNET (30 points)
       [B] (4 points): Partial configuration - missing some settings
       [C] (0 points): Does not configure HBNet or fundamentally incorrect
 
-  Criterion 13: Network Scoring (Task 3.3)
+  Criterion 12: Network Scoring (Task 3.3)
     Description: Scores networks based on His H-bond energy
     Max Points: 7
     Levels:
@@ -124,7 +116,7 @@ PART 3: MONOMER DESTABILIZATION WITH HBNET (30 points)
       [B] (3 points): Extracts H-bonds but incorrect energy calculation or threshold
       [C] (0 points): Does not implement scoring
 
-  Criterion 14: Complete Pipeline Integration (Task 3.4)
+  Criterion 13: Complete Pipeline Integration (Task 3.4)
     Description: Combines all steps into working pipeline
     Max Points: 7
     Levels:

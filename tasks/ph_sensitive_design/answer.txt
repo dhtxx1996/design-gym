@@ -13,9 +13,6 @@
 **Question 0.4**: A) His-His, His-Arg, His-Lys networks
 - These polar/charged networks are disrupted by His protonation
 
-**Question 0.5**: B) His H-bond energy < -0.5 kcal/mol (favorable)
-- Networks must have sufficiently strong H-bonds to be functional at neutral pH
-
 ---
 
 ## Part 1: ProteinMPNN with Histidine Bias
