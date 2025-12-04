@@ -2,141 +2,231 @@ Total Points: 100
 
 Notes: This rubric evaluates understanding and implementation of pH-sensitive binder design workflows from Ahn et al. 2025. The task covers two strategies: (A) Interface Destabilization using His-cation pairs, and (B) Monomer Destabilization using buried His H-bond networks.
 
-Criteria (15):
+================================================================================
+GRADING POLICIES
+================================================================================
 
----
+Mock Data Policy:
+  - Mock/stub data usage requires explicit documentation in code comments
+  - Must document: (1) what is mocked, (2) why tool unavailable, (3) expected real behavior
+  - Undocumented mock data: 0 points for execution component
+  - Documented mock data: up to 50% of execution points
+
+Unavailable Tools:
+  - If PyRosetta/ProteinMPNN unavailable: full implementation points, partial execution
+  - Must demonstrate correct API usage even if tool not installed
+  - Alternative approaches (e.g., BioPython for SASA) acceptable with justification
+
+Evidence Requirements:
+  - Output files must exist at specified paths
+  - JSON files must be valid and contain required keys
+  - PDB/CIF files must be parseable
+  - Numerical values must be within reasonable ranges
+
+================================================================================
 PART 0: CONCEPTUAL UNDERSTANDING (12 points)
----
+================================================================================
 
-  Criterion 1: Histidine pKa Understanding (Q0.1)
-    Description: Correctly identifies why His is key for pH-sensitivity
-    Max Points: 3
-    Levels:
-      [A] (3 points): Correctly selects B - His pKa (~6.0) near physiological pH allows protonation state changes
-      [B] (1 point): Selects answer related to H-bonding but misses pKa reasoning
-      [C] (0 points): Incorrect answer
+Criterion 1: Histidine pKa Understanding (Q0.1) [3 pts]
+  [A] (3 pts): Correctly selects B - His pKa (~6.0) near physiological pH
+  [B] (1 pt): Mentions H-bonding but misses pKa reasoning
+  [C] (0 pts): Incorrect answer
 
-  Criterion 2: Interface Destabilization Motif (Q0.2)
-    Description: Identifies correct residue pairs for Strategy A
-    Max Points: 3
-    Levels:
-      [A] (3 points): Correctly selects B - His adjacent to Arg/Lys (positively charged)
-      [B] (1 point): Mentions His but wrong partner residues
-      [C] (0 points): Incorrect answer
+Criterion 2: Interface Destabilization Motif (Q0.2) [3 pts]
+  [A] (3 pts): Correctly selects B - His adjacent to Arg/Lys
+  [B] (1 pt): Mentions His but wrong partner residues
+  [C] (0 pts): Incorrect answer
 
-  Criterion 3: Network Placement (Q0.3)
-    Description: Identifies where to place His networks for Strategy B
-    Max Points: 3
-    Levels:
-      [A] (3 points): Correctly selects C - Buried in protein core
-      [B] (1 point): Mentions structure but wrong location
-      [C] (0 points): Incorrect answer
+Criterion 3: Network Placement (Q0.3) [3 pts]
+  [A] (3 pts): Correctly selects C - Buried in protein core
+  [B] (1 pt): Mentions structure but wrong location
+  [C] (0 pts): Incorrect answer
 
-  Criterion 4: Network Types (Q0.4)
-    Description: Identifies valid network types for Strategy B
-    Max Points: 3
-    Levels:
-      [A] (3 points): Correctly selects A - His-His, His-Arg, His-Lys networks
-      [B] (1 point): Mentions His but incomplete network types
-      [C] (0 points): Incorrect answer
+Criterion 4: Network Types (Q0.4) [3 pts]
+  [A] (3 pts): Correctly selects A - His-His, His-Arg, His-Lys networks
+  [B] (1 pt): Mentions His but incomplete network types
+  [C] (0 pts): Incorrect answer
 
----
+================================================================================
 PART 1: PROTEINMPNN HISTIDINE BIAS (23 points)
----
+================================================================================
 
-  Criterion 5: Global Bias Argument (Task 1.1)
-    Description: Correctly writes ProteinMPNN bias argument
-    Max Points: 5
-    Levels:
-      [A] (5 points): Correct format: --bias_AA "H:2.0" (or equivalent valid syntax)
-      [B] (2 points): Correct flag name but wrong format or value
-      [C] (0 points): Wrong flag or completely incorrect syntax
+Criterion 5: Global Bias Argument (Task 1.1) [5 pts]
+  Implementation (3 pts):
+    [A] (3 pts): Correct format: --bias_AA "H:2.0" or equivalent
+    [B] (1 pt): Correct flag name but wrong format/value
+    [C] (0 pts): Wrong flag or incorrect syntax
+  Execution (2 pts):
+    [A] (2 pts): Command is executable (syntax validated)
+    [B] (1 pt): Minor syntax issues but intent clear
+    [C] (0 pts): Command would fail
 
-  Criterion 6: Position-Specific Bias Dictionary (Task 1.2)
-    Description: Creates correct per-residue bias JSON structure
-    Max Points: 6
-    Levels:
-      [A] (6 points): Correctly creates dictionary with: (1) chain+residue keys (e.g., "A10"), (2) all 20 amino acids, (3) His biased to 3.0, (4) others at 0.0
-      [B] (3 points): Correct structure but missing some amino acids or wrong bias values
-      [C] (0 points): Incorrect structure or does not implement function
+Criterion 6: Position-Specific Bias Dictionary (Task 1.2) [6 pts]
+  Implementation (4 pts):
+    [A] (4 pts): Correct structure: chain+residue keys, 20 AAs, His=3.0, others=0.0
+    [B] (2 pts): Correct structure but missing AAs or wrong values
+    [C] (0 pts): Incorrect structure
+  Execution (2 pts):
+    [A] (2 pts): Outputs valid JSON file; verified keys exist
+    [B] (1 pt): JSON created but malformed or missing keys
+    [C] (0 pts): No output or invalid JSON
+  Evidence: output/his_bias_*.json must exist and be valid JSON
 
-  Criterion 7: Interface Residue Selection (Task 1.3)
-    Description: Implements distance-based interface residue identification
-    Max Points: 6
-    Levels:
-      [A] (6 points): Correctly implements: (1) PDB parsing with BioPython, (2) NeighborSearch on target atoms, (3) distance cutoff check (8Å), (4) returns list of interface residue numbers
-      [B] (3 points): Partial implementation - parses structure but incomplete distance logic
-      [C] (0 points): Does not implement or fundamentally incorrect approach
+Criterion 7: Interface Residue Selection (Task 1.3) [6 pts]
+  Implementation (4 pts):
+    [A] (4 pts): Correct logic: PDB parsing, NeighborSearch, 8Å cutoff, returns residue list
+    [B] (2 pts): Parses structure but incomplete distance logic
+    [C] (0 pts): Does not implement or fundamentally incorrect
+  Execution (2 pts):
+    [A] (2 pts): Returns non-empty list of residue numbers for test PDB
+    [B] (1 pt): Runs but returns unexpected results
+    [C] (0 pts): Errors or no output
+  Evidence: Printed output shows interface residue count (typical: 15-50)
 
-  Criterion 8: Complete Interface His-Bias Workflow (Task 1.4)
-    Description: Combines interface selection with His bias creation
-    Max Points: 6
-    Levels:
-      [A] (6 points): Correctly chains: (1) interface selection, (2) His bias dict creation for interface positions, (3) validates reasonable interface size (15-30 residues typical)
-      [B] (3 points): Combines functions but missing validation or error handling
-      [C] (0 points): Does not integrate or incomplete implementation
+Criterion 8: Complete His-Bias Workflow (Task 1.4) [6 pts]
+  Implementation (4 pts):
+    [A] (4 pts): Chains interface selection → bias dict → validation
+    [B] (2 pts): Combines functions but missing validation
+    [C] (0 pts): Does not integrate
+  Execution (2 pts):
+    [A] (2 pts): Produces output/his_bias_pcsk9.json with correct structure
+    [B] (1 pt): File created but incomplete
+    [C] (0 pts): No output file
+  Evidence: output/his_bias_pcsk9.json exists with interface positions
 
----
+================================================================================
 PART 2: INTERFACE DESTABILIZATION SCORING (35 points)
----
+================================================================================
 
-  Criterion 9: His-Cation Motif Detection Logic (Task 2.1)
-    Description: Implements interface His-Arg/Lys detection
-    Max Points: 12
-    Levels:
-      [A] (12 points): Correctly implements: (1) interface residue identification (5Å cutoff), (2) His nitrogen atom identification (ND1, NE2), (3) distance to Arg/Lys cation atoms (< 3.5Å), (4) returns structured pair data
-      [B] (6 points): Partial implementation - identifies His or cations but not complete pair detection
-      [C] (0 points): Does not implement or fundamentally incorrect approach
+Criterion 9: His-Cation Motif Detection (Task 2.1) [12 pts]
+  Implementation (8 pts):
+    [A] (8 pts): Correct logic: His ND1/NE2 atoms, Arg/Lys cation atoms, <3.5Å distance
+    [B] (4 pts): Identifies His or cations but not complete pair detection
+    [C] (0 pts): Does not implement or fundamentally incorrect
+  Execution (4 pts):
+    [A] (4 pts): Finds His-cation pairs in test structure; returns structured data
+    [B] (2 pts): Runs but returns incomplete data
+    [C] (0 pts): Errors or no output
+  Evidence: Printed output shows pairs found (e.g., "HIS A512:NE2 - ARG A499")
 
-  Criterion 10: PyRosetta Scoring Pipeline (Task 2.2)
-    Description: Implements Rosetta scoring with correct components
-    Max Points: 12
-    Levels:
-      [A] (12 points): Correctly uses: (1) pose loading, (2) score function setup, (3) FastRelax, (4) InterfaceAnalyzerMover, (5) extracts dG_separated, dSASA_int, fa_elec
-      [B] (6 points): Uses PyRosetta correctly but missing some components (e.g., no FastRelax or incomplete metrics)
-      [C] (0 points): Does not use PyRosetta or fundamentally incorrect approach
+Criterion 10: PyRosetta Scoring Pipeline (Task 2.2) [12 pts]
+  Implementation (8 pts):
+    [A] (8 pts): Correct API: pose loading, FastRelax, InterfaceAnalyzerMover, score extraction
+    [B] (4 pts): Uses PyRosetta but missing components (no FastRelax, incomplete metrics)
+    [C] (0 pts): Does not use PyRosetta or fundamentally incorrect
+  Execution (4 pts):
+    [A] (4 pts): Returns dict with all scores: total_score, dG_separated, dSASA_int, ddG_elec
+    [B] (2 pts): Returns partial scores OR uses documented stub with realistic values
+    [C] (0 pts): No scores returned
+  PyRosetta Unavailable Policy:
+    - Implementation: Full points if API usage is correct
+    - Execution: 2 pts max with documented stub returning realistic mock values
 
-  Criterion 11: Filtering Pipeline Logic (Task 2.3)
-    Description: Combines motif and score filtering correctly
-    Max Points: 11
-    Levels:
-      [A] (11 points): Correctly implements both criteria: (1) min_his_cation_pairs >= 1, (2) ddG_elec >= 0, with proper AND logic
-      [B] (5 points): Implements one criterion correctly but not both
-      [C] (0 points): Does not implement filtering or incorrect logic
+Criterion 11: Filtering Pipeline (Task 2.3) [11 pts]
+  Implementation (7 pts):
+    [A] (7 pts): Correct AND logic: his_cation_pairs >= 1 AND ddG_elec >= 0
+    [B] (3 pts): Implements one criterion correctly
+    [C] (0 pts): Does not implement or incorrect logic
+  Execution (4 pts):
+    [A] (4 pts): Filters candidates; saves passing PDBs to output/interface_candidates/passing/
+    [B] (2 pts): Filters but does not save or incomplete output
+    [C] (0 pts): No filtering performed
+  Evidence Required:
+    - output/interface_candidates/candidates_summary.json
+    - output/interface_candidates/passing/*.pdb (if any pass)
+    - output/interface_candidates/passing/*_motifs.json
 
----
+================================================================================
 PART 3: MONOMER DESTABILIZATION WITH HBNET (30 points)
----
+================================================================================
 
-  Criterion 12: Core Residue Identification (Task 3.1)
-    Description: Implements SASA-based core detection
-    Max Points: 8
-    Levels:
-      [A] (8 points): Correctly implements: (1) per-residue SASA calculation, (2) relative SASA using max SASA values, (3) threshold comparison (< 25%)
-      [B] (4 points): Calculates SASA but wrong normalization or threshold
-      [C] (0 points): Does not implement or incorrect approach
+Criterion 12: Core Residue Identification (Task 3.1) [8 pts]
+  Implementation (5 pts):
+    [A] (5 pts): Correct logic: per-residue SASA, relative SASA normalization, <25% threshold
+    [B] (2 pts): Calculates SASA but wrong normalization or threshold
+    [C] (0 pts): Does not implement
+  Execution (3 pts):
+    [A] (3 pts): Returns list of buried residues; saves to core_residues.json
+    [B] (1 pt): Runs but incorrect results or no file output
+    [C] (0 pts): Errors or no output
+  Evidence: output/hbnet_designs/core_residues.json with residue list
 
-  Criterion 13: HBNet Configuration (Task 3.2)
-    Description: Configures HBNet for His-containing networks
-    Max Points: 8
-    Levels:
-      [A] (8 points): Correctly configures: (1) core position selector, (2) allowed amino acids (H, R, K), (3) minimum network size, (4) His requirement
-      [B] (4 points): Partial configuration - missing some settings
-      [C] (0 points): Does not configure HBNet or fundamentally incorrect
+Criterion 13: HBNet Configuration (Task 3.2) [8 pts]
+  Implementation (5 pts):
+    [A] (5 pts): Correct config: core selector, allowed AAs (H,R,K), min network size, His requirement
+    [B] (2 pts): Partial configuration - missing settings
+    [C] (0 pts): Does not configure or fundamentally incorrect
+  Execution (3 pts):
+    [A] (3 pts): HBNet object created with correct settings (or documented stub)
+    [B] (1 pt): Created but missing some settings
+    [C] (0 pts): Not created
+  HBNet Unavailable Policy:
+    - Implementation: Full points if API usage is correct
+    - Execution: 1.5 pts max with documented stub
 
-  Criterion 14: Network Scoring (Task 3.3)
-    Description: Scores networks based on His H-bond energy
-    Max Points: 7
-    Levels:
-      [A] (7 points): Correctly implements: (1) HBondSet extraction, (2) His-specific H-bond identification, (3) energy summation, (4) threshold comparison (< -0.5 kcal/mol)
-      [B] (3 points): Extracts H-bonds but incorrect energy calculation or threshold
-      [C] (0 points): Does not implement scoring
+Criterion 14: Network Scoring (Task 3.3) [7 pts]
+  Implementation (4 pts):
+    [A] (4 pts): Correct logic: HBondSet, His-specific H-bonds, energy < -0.5 kcal/mol threshold
+    [B] (2 pts): Extracts H-bonds but incorrect threshold or energy calculation
+    [C] (0 pts): Does not implement
+  Execution (3 pts):
+    [A] (3 pts): Scores networks; identifies passing (His H-bond energy < -0.5)
+    [B] (1 pt): Returns scores but incorrect filtering
+    [C] (0 pts): No scoring
+  Evidence: Printed output shows network energies and pass/fail status
 
-  Criterion 15: Complete Pipeline Integration (Task 3.4)
-    Description: Combines all steps into working pipeline
-    Max Points: 7
-    Levels:
-      [A] (7 points): Correctly chains all steps: (1) core identification, (2) HBNet setup, (3) apply to pose, (4) scoring and filtering, (5) output handling
-      [B] (3 points): Partially complete pipeline - missing some steps
-      [C] (0 points): Does not integrate or incomplete implementation
+Criterion 15: Complete Pipeline Integration (Task 3.4) [7 pts]
+  Implementation (4 pts):
+    [A] (4 pts): Chains all steps: core ID → HBNet → scoring → output
+    [B] (2 pts): Missing steps or incomplete integration
+    [C] (0 pts): Does not integrate
+  Execution (3 pts):
+    [A] (3 pts): Full pipeline runs; all output files generated
+    [B] (1 pt): Partial execution; some outputs missing
+    [C] (0 pts): Pipeline fails
+  Evidence Required:
+    - output/hbnet_designs/pipeline_results.json
+    - output/hbnet_designs/scaffold_for_hbnet.pdb
+    - output/hbnet_designs/scaffold_networks_highlighted.pdb
+    - output/hbnet_designs/network_*_design.json
 
+================================================================================
+EXECUTION CHECKLIST
+================================================================================
+
+Use this checklist for consistent grading of execution components:
+
+Part 1 Outputs:
+  [ ] output/his_bias_pcsk9.json exists
+  [ ] JSON is valid (parseable)
+  [ ] Contains chain+residue keys (e.g., "P123")
+  [ ] Each position has 20 amino acid entries
+  [ ] His bias value is 3.0, others are 0.0
+
+Part 2 Outputs:
+  [ ] output/interface_candidates/candidates_summary.json exists
+  [ ] Summary contains: total_candidates, passing_motif, passing_elec, passing_all
+  [ ] output/interface_candidates/passing/ directory exists
+  [ ] Passing PDB files are valid (parseable)
+  [ ] Motif JSON files contain his_cation_pairs list
+
+Part 3 Outputs:
+  [ ] output/hbnet_designs/core_residues.json exists
+  [ ] Contains list of {chain, resnum, resname, rel_sasa}
+  [ ] output/hbnet_designs/pipeline_results.json exists
+  [ ] Contains: networks_found, networks_passing, passing_designs
+  [ ] output/hbnet_designs/scaffold_for_hbnet.pdb exists
+  [ ] output/hbnet_designs/scaffold_networks_highlighted.pdb exists
+  [ ] B-factors in highlighted PDB mark network positions (100 vs 0)
+  [ ] At least one network_*_design.json file exists
+
+================================================================================
+POINT SUMMARY
+================================================================================
+
+Part 0 (Conceptual):     12 pts (4 criteria × 3 pts)
+Part 1 (ProteinMPNN):    23 pts (4 criteria, impl+exec split)
+Part 2 (Interface):      35 pts (3 criteria, impl+exec split)
+Part 3 (HBNet):          30 pts (4 criteria, impl+exec split)
+----------------------------------------
+TOTAL:                  100 pts
