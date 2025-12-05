@@ -1,6 +1,45 @@
 #!/usr/bin/env python3
 """
-Monomer Destabilization Pipeline for pH-Sensitive Protein Design
+pH-Sensitive Protein Design Task: Monomer Destabilization
+
+Problem Statement:
+    You are tasked with engineering a pH-sensitive "switch" into a stable protein scaffold.
+    The goal is to introduce a buried Histidine-mediated hydrogen bond network that is
+    stable at neutral pH (7.4) but becomes destabilizing at acidic pH (~6.0),
+    triggering a conformational change or unfolding.
+
+    Using the provided scaffold `data/scaffold.pdb` (a de novo designed NTF2 fold, PDB ID 5L33),
+    develop a computational workflow to:
+
+    1.  **Identify Core Residues**: Analyze the structure to find buried residues suitable
+        for core engineering. pH-sensing residues must be buried to experience the pKa shift
+        necessary for sensing physiological pH changes.
+    2.  **Select Network Positions**: Identify a geometric motif (e.g., a pair or triplet of residues)
+        within the core that can be mutated to Histidines (or His-Polar pairs) to form a
+        hydrogen bond network.
+    3.  **Computational Design**:
+        *   Mutate the selected positions to Histidine.
+        *   Redesign the surrounding sequence to pack against the new Histidines and stabilize
+            the neutral-pH state (Inverse Folding).
+    4.  **Validation**:
+        *   Predict the structure of your designed sequences (Forward Folding).
+        *   Verify that the predicted structure adopts the target fold (high pLDDT/low RMSD).
+        *   **Crucially**, verify that the intended Histidine network is formed in the
+            predicted structure (check geometry/distances).
+
+Constraints & Hints:
+    *   **Tools**: You may use any standard structural biology tools (BioPython, etc.) and
+        machine learning models (ProteinMPNN, ESMFold, AlphaFold) available to you.
+    *   **SASA**: Buried residues typically have a relative Solvent Accessible Surface Area
+        (SASA) < 0.25.
+    *   **Geometry**: A good His-His hydrogen bond typically requires Cβ-Cβ distances in
+        the range of 5.5 - 8.0 Å.
+    *   **Independence**: Your solution should be generalizable. Hard-coding specific residue
+        numbers without algorithmic justification is discouraged.
+
+Deliverables:
+    *   This script (`workflow.py`) implementing the pipeline.
+    *   Output data files (JSON/PDB) in the `output/` directory.
 """
 
 import sys

@@ -1,0 +1,70 @@
+Total Points: 100
+
+Notes: The key to a full-score answer is demonstrating a complete understanding of the computational protein design workflow for pH sensitivity: (1) correctly identifying buried core residues that are suitable for pH sensing, (2) selecting a geometric motif that involves histidine residues capable of forming pH-dependent hydrogen bonds (e.g., His-His or His-Polar), (3) performing sequence design to accommodate the installed motif (inverse folding), (4) validating the design using structure prediction (forward folding) to confirm the motif is formed and the protein folds correctly, and (5) providing evidence of success through metrics like pLDDT, RMSD, and geometric analysis of the predicted structure.
+
+Criteria (8):
+
+  Criterion 1: Core Residue Identification
+    Description: Evaluates the correct identification of buried residues in the scaffold structure.
+    Max Points: 10
+    Levels:
+      [A] (10 points): Correctly identifies buried residues by: (1) Calculating Solvent Accessible Surface Area (SASA) using a standard tool (BioPython, FreeSASA, etc.), (2) Using a relative SASA threshold (e.g., < 0.25) or absolute threshold appropriate for burial, (3) Excluding surface-exposed residues from consideration for the pH sensor, and (4) Returning a plausible list of core residues.
+      [B] (5 points): Identifies residues but: (1) Uses an unreasonable threshold (too strict or too loose), (2) Fails to normalize SASA correctly, OR (3) Includes some surface residues.
+      [C] (0 points): Fails to calculate SASA or identifies surface residues as core.
+
+  Criterion 2: Geometric Motif Selection
+    Description: Evaluates the selection of a specific pair or cluster of residues for the pH-sensing motif.
+    Max Points: 15
+    Levels:
+      [A] (15 points): Selects an appropriate motif by: (1) Screening core residues for pairwise distances compatible with hydrogen bonding (e.g., Cbeta-Cbeta distance 5.5-8.0 Å or similar geometric criteria), (2) Choosing a motif that involves Histidine (e.g., His-His, His-Glu, His-Asp) known to shift pKa in the physiological range (~6.0-6.5), and (3) Justifying the choice based on pH-sensing mechanics (e.g., protonation state change disrupts/forms the bond).
+      [B] (7 points): Selects a motif but: (1) Geometric criteria are loose or undefined, (2) Chooses a motif with poor pH sensitivity (e.g., His-Lys), OR (3) Fails to justify the selection.
+      [C] (0 points): Randomly selects residues or chooses incompatible pairs.
+
+  Criterion 3: Sequence Design (Inverse Folding)
+    Description: Evaluates the redesign of the protein sequence to accommodate the new motif.
+    Max Points: 15
+    Levels:
+      [A] (15 points): Performs sequence design by: (1) Using a computational design tool (ProteinMPNN, Rosetta, etc.), (2) Fixing the identity of the motif residues (e.g., forcing His at the selected positions), (3) Allowing surrounding residues to mutate to repack the core and accommodate the new side chains, and (4) Generating multiple sequence candidates.
+      [B] (7 points): Designs sequence but: (1) Fails to fix the motif residues (allowing them to mutate away), (2) Does not allow sufficient flexibility in the surrounding sequence, OR (3) Generates only a single sequence without sampling.
+      [C] (0 points): Fails to perform sequence design or manually mutates only the motif residues without repacking.
+
+  Criterion 4: Structural Validation (Forward Folding)
+    Description: Evaluates the validation of the designed sequences using structure prediction.
+    Max Points: 15
+    Levels:
+      [A] (15 points): Validates designs by: (1) Using a high-accuracy structure prediction tool (ESMFold, AlphaFold2, etc.), (2) Predicting 3D structures for the designed sequences, (3) Assessing confidence metrics (pLDDT) to ensure the protein is predicted to fold well, and (4) Comparing the predicted structure to the original scaffold (RMSD).
+      [B] (7 points): Validates but: (1) Uses a low-accuracy method, (2) Fails to check confidence metrics, OR (3) Does not compare to the scaffold.
+      [C] (0 points): Fails to perform structural validation.
+
+  Criterion 5: Motif Geometry Verification
+    Description: Evaluates whether the predicted structure actually contains the desired motif geometry.
+    Max Points: 15
+    Levels:
+      [A] (15 points): Verifies motif geometry by: (1) Measuring the distance/angle between the designed His residues in the *predicted* structure, (2) Confirming they are within hydrogen-bonding distance (e.g., < 3.5 Å side-chain distance), and (3) Demonstrating that the network was successfully installed in silico.
+      [B] (7 points): Checks geometry but: (1) Uses incorrect atoms for measurement, (2) Accepts poor geometry (e.g., > 5 Å), OR (3) Only checks sequence presence, not 3D geometry.
+      [C] (0 points): Fails to verify the geometry of the motif in the predicted structure.
+
+  Criterion 6: Workflow Independence & Robustness
+    Description: Evaluates if the solution is robust and not hard-coded to specific tools.
+    Max Points: 10
+    Levels:
+      [A] (10 points): Demonstrates robustness by: (1) Using standard libraries or APIs effectively, (2) Handling potential failures (e.g., API timeouts, missing residues), (3) Writing modular code (functions for each step), and (4) Producing reproducible results.
+      [B] (5 points): Workflow functions but: (1) Hard-codes values specific to one run/pdb, (2) Poor error handling, OR (3) Code is monolithic and hard to follow.
+      [C] (0 points): Workflow is fragile, hard-coded, or does not run.
+
+  Criterion 7: Biological Interpretation
+    Description: Evaluates the explanation of why this design would work as a pH sensor.
+    Max Points: 10
+    Levels:
+      [A] (10 points): Provides clear interpretation by: (1) Explaining the mechanism: buried His pKa shift, charge repulsion upon protonation at low pH, (2) Predicting the effect: destabilization of the core leading to unfolding or conformational change, and (3) Discussing potential applications (e.g., endosomal release, biosensing).
+      [B] (5 points): Explains but: (1) Explanation is generic, (2) Misses the key concept of buried pKa shift, OR (3) Does not connect the design to the function.
+      [C] (0 points): Fails to provide biological interpretation.
+
+  Criterion 8: Code Quality & Documentation
+    Description: Evaluates the readability and documentation of the provided code.
+    Max Points: 10
+    Levels:
+      [A] (10 points): Code is high quality: (1) Clear variable names, (2) Helpful comments/docstrings, (3) Logical structure, (4) Minimal external dependencies or clear instructions, and (5) Clean output organization.
+      [B] (5 points): Code is functional but: (1) Messy or hard to read, (2) Lacks comments, OR (3) Poor variable naming.
+      [C] (0 points): Code is unreadable or largely undocumented.
+
