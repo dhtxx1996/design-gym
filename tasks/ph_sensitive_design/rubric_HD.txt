@@ -50,7 +50,7 @@ Criteria (10):
     Levels:
       [A] (5 points): Correctly selects network by: (1) Choosing a network that passes the energy filter (< -0.5 kcal/mol), (2) Selecting a network type appropriate for pH sensitivity (His-His, His-Arg, or His-Lys), (3) Justifying selection based on energy strength and network stability, (4) Explaining why the selected network will be destabilized at low pH (His protonation disrupts H-bonds), and (5) Identifying all residue positions in the selected network.
 
-      [B] (2 points): Selects network but: (1) Does not justify selection clearly, (2) Chooses network type with poor pH sensitivity, OR (3) Fails to explain the mechanism of pH-dependent destabilization.
+      [B] (2 points): Selects network but: (1) Does not justify selection clearly, (2) Chooses network type with energy not passing the criteria, OR (3) Fails to explain the mechanism of pH-dependent destabilization.
 
       [C] (0 points): Fails to select a network, chooses inappropriate network, or does not address network selection.
 
@@ -68,7 +68,7 @@ Criteria (10):
     Description: Evaluates validation of designed sequences using structure prediction.
     Max Points: 10
     Levels:
-      [A] (10 points): Correctly validates designs by: (1) Using a high-accuracy structure prediction tool (ESMFold, AlphaFold2, or similar), (2) Predicting 3D structures for designed sequences, (3) Predicting structures for multiple design candidates (at least 3-5 sequences), (4) Saving predicted structures in standard format (PDB), and (5) Extracting confidence metrics (pLDDT scores) from predictions.
+      [A] (10 points): Correctly validates designs by: (1) Using a high-accuracy structure prediction tool (ESMFold, AlphaFold2, Boltz-2, Chai-1), (2) Predicting 3D structures for designed sequences, (3) Predicting structures for multiple design candidates (at least 3-5 sequences), (4) Saving predicted structures in standard format (PDB), and (5) Extracting confidence metrics (pLDDT scores) from predictions.
 
       [B] (5 points): Validates but: (1) Uses low-accuracy prediction method, (2) Predicts only single structure, (3) Fails to extract confidence metrics, OR (4) Does not save structures properly.
 
