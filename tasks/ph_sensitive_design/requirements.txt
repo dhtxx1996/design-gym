@@ -1,7 +1,0 @@
-numpy>=1.20.0
-biopython>=1.79
-
-# Optional: PyRosetta (required for Tasks 2.2, 3.2-3.4)
-# PyRosetta must be obtained from https://www.pyrosetta.org/
-# Not available via pip - requires license
-
