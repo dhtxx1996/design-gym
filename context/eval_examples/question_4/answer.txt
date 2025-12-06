@@ -1,0 +1,18 @@
+**Answer:**
+
+Central Network Hub Proteins (Top 10):
+
+In participants with low beta-cell function (n=8), a co-expression network was constructed linking 2 insulin-resistance-associated triglycerides with 207 proteins. The following proteins were identified as central network hubs:
+
+1. LHPP (Phospholysine phosphohistidine inorganic pyrophosphate phosphatase)
+2. BGN (Biglycan)
+3. SCRN1 (Secernin-1)
+4. NSFL1C (NSFL1 cofactor)
+5. SOD1 (Superoxide dismutase 1)
+6. CARHSP1 (Calcium-regulated heat stable protein 1)
+7. CCS (Copper chaperone for superoxide dismutase)
+8. RBKS (Ribokinase)
+9. PEBP1 (Phosphatidylethanolamine-binding protein 1)
+10. DNPH1 (2'-deoxynucleoside 5'-phosphate N-hydrolase 1)
+
+These hub proteins showed the strongest correlations (|r| ≥ 0.4, p < 0.05) with insulin-resistance-associated triglycerides in the low beta-cell function group.

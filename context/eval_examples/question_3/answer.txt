@@ -1,0 +1,23 @@
+**Answer:**
+
+Top 10 Differentially Abundant Metabolites (Potato-spikers vs Grape-spikers):
+
+1. Ser-Asp (1.23× higher)
+2. gamma-glutamyl-L-isoleucine/leucine (1.14× higher)
+3. MMV019790 (1.51× higher)
+4. gamma-Glutamylthreonine (1.13× higher)
+5. C16:0 AC (L-Palmitoylcarnitine) [LIPID] (1.18× higher)
+6. C16:0 AC(1) (L-Palmitoylcarnitine) [LIPID] (1.16× higher)
+7. gamma-Glutamylthreonine (1.11× higher)
+8. Val-Ser (1.26× higher)
+9. C16:0 AC [LIPID] (1.18× higher)
+10. L-α-glutamyl-L-Lysine (1.07× higher)
+
+Lipid Species That Mediate Insulin Resistance and Beta-Cell Function:
+
+Three lipid species were identified among the top 10 differentially abundant metabolites:
+- C16:0 AC (L-Palmitoylcarnitine)** - 1.18× higher in potato-spikers
+- C16:0 AC(1) (L-Palmitoylcarnitine)** - 1.16× higher in potato-spikers  
+- C16:0 AC - 1.18× higher in potato-spikers
+
+All three are palmitoylcarnitine variants (long-chain acylcarnitines), which are known mediators of insulin resistance through incomplete fatty acid oxidation.

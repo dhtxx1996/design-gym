@@ -1,0 +1,128 @@
+Total Points: 100
+
+
+
+Notes: The key to a full-score answer is demonstrating a complete understanding of the computational workflow: (1) correctly identifying bread-spikers using the median threshold method on glucose peak responses, (2) performing proper statistical analysis with multiple linear regression adjusting for age and BMI, (3) applying the correct filtering criteria (p < 0.05 AND positive coefficient), and (4) interpreting the results in the context of hypertension-associated metabolites. Answers that perform the analysis correctly and identify metabolites with significant positive correlations should receive full credit.
+
+Criteria (12):
+
+  Criterion 1: Baseline Glucose Calculation
+    Description: Evaluates correct calculation of baseline glucose from pre-meal time points.
+    Max Points: 5
+    Levels:
+      [A] (5 points): Correctly calculates baseline glucose as the mean of glucose values from negative time points (typically -25 to 0 minutes) for each subject-rep combination, excluding post-meal time points.
+
+      [B] (2 points): Calculates baseline but uses incorrect time window (e.g., includes post-meal data) or uses incorrect aggregation method (e.g., median instead of mean, or single time point).
+
+      [C] (0 points): Fails to calculate baseline glucose, uses completely wrong approach, or does not address baseline calculation.
+
+  Criterion 2: Peak Glucose Delta Calculation
+    Description: Evaluates correct calculation of peak glucose increase from baseline for each subject-rep combination.
+    Max Points: 7
+    Levels:
+      [A] (7 points): Correctly calculates peak glucose delta by: (1) identifying maximum glucose value from post-meal time points (≥ 0 minutes), (2) subtracting baseline glucose from peak glucose to get delta, and (3) performing this calculation for each subject-rep combination separately.
+
+      [B] (3 points): Calculates peak glucose but: (1) Uses absolute peak value without subtracting baseline, (2) Uses incorrect time window for peak identification, OR (3) Fails to calculate delta per subject-rep combination.
+
+      [C] (0 points): Fails to calculate peak glucose delta, uses completely wrong methodology, or does not address peak calculation.
+
+  Criterion 3: Excluding Mitigators
+    Description: Evaluates correct filtering to exclude bread consumption with mitigators.
+    Max Points: 4
+    Levels:
+      [A] (4 points): Correctly filters bread consumption data to exclude rows where mitigator is not null/NA, ensuring only pure bread consumption (without preloads) is analyzed.
+
+      [B] (2 points): Mentions filtering but applies it incorrectly (e.g., includes mitigators, filters wrong column) OR describes the concept but implementation is unclear.
+
+      [C] (0 points): Fails to exclude mitigators, includes mitigated bread consumption in analysis, or does not address this filtering step.
+
+  Criterion 4: Averaging Peak Responses Across Replicates
+    Description: Evaluates correct averaging of peak glucose deltas across replicates per subject.
+    Max Points: 5
+    Levels:
+      [A] (5 points): Correctly averages peak glucose delta values across all replicates for each subject, creating a single average peak response per subject before classification.
+
+      [B] (2 points): Attempts to average but: (1) Uses incorrect aggregation method (e.g., sum, max, or median instead of mean), (2) Averages incorrectly (e.g., across subjects instead of replicates), OR (3) Describes averaging but doesn't implement it.
+
+      [C] (0 points): Fails to average across replicates, uses raw per-rep values for classification, or does not address replicate averaging.
+
+  Criterion 5: Median Threshold Classification
+    Description: Evaluates correct use of median threshold to classify bread-spikers.
+    Max Points: 6
+    Levels:
+      [A] (6 points): Correctly classifies subjects as bread-spikers by: (1) calculating the median of all subjects' average peak responses, (2) classifying subjects with average peak response above median as bread-spikers, and (3) demonstrating understanding that this results in approximately half the subjects being classified as spikers (e.g., 18 out of 37).
+
+      [B] (3 points): Uses median threshold but: (1) Applies it incorrectly (e.g., below median instead of above), (2) Uses wrong variable (e.g., absolute glucose instead of delta), OR (3) Uses fixed threshold instead of data-driven median.
+
+      [C] (0 points): Fails to use median threshold, uses completely arbitrary threshold, or does not address classification method.
+
+  Criterion 6: Metabolomics Column Identification
+    Description: Evaluates correct identification and grouping of metabolomics abundance columns by subject.
+    Max Points: 5
+    Levels:
+      [A] (5 points): Correctly identifies abundance columns by: (1) Recognizing column format (XB{subject}_{rep}), (2) Extracting subject ID from column names, and (3) Grouping columns by subject for subsequent averaging.
+
+      [B] (2 points): Identifies columns but: (1) Uses incorrect parsing method, (2) Fails to group by subject correctly, OR (3) Describes the approach but implementation has errors.
+
+      [C] (0 points): Fails to identify subject-specific columns, uses incorrect column format, or does not address column identification.
+
+  Criterion 7: Metabolite Abundance Averaging
+    Description: Evaluates correct averaging of metabolite abundances across replicates per subject.
+    Max Points: 6
+    Levels:
+      [A] (6 points): Correctly averages metabolite abundances by: (1) For each metabolite and each subject, averaging all replicate values (XB{subject}_1, XB{subject}_2, etc.), (2) Handling missing values appropriately (using only valid non-NA values for mean calculation), and (3) Creating a subject-level metabolite matrix.
+
+      [B] (3 points): Averages abundances but: (1) Uses incorrect aggregation (e.g., sum, median, or max instead of mean), (2) Incorrectly handles missing values (e.g., includes NA in mean), OR (3) Fails to create proper subject-level matrix.
+
+      [C] (0 points): Fails to average across replicates, uses raw replicate-level data, or does not address metabolite averaging.
+
+  Criterion 8: Regression Model Specification
+    Description: Evaluates correct specification of multiple linear regression model.
+    Max Points: 12
+    Levels:
+      [A] (12 points): Correctly specifies regression model with: (1) Systolic blood pressure as dependent variable, (2) Metabolite abundance, Age, and BMI as independent variables, (3) Includes intercept term, and (4) Applies this model structure to each metabolite separately.
+
+      [B] (6 points): Specifies regression but: (1) Uses incorrect dependent variable, (2) Missing one or more required covariates (Age or BMI), (3) Fails to include intercept, OR (4) Applies model incorrectly (e.g., to all metabolites at once).
+
+      [C] (0 points): Uses incorrect model type (e.g., correlation, univariate regression), fails to specify regression model, or provides completely wrong model structure.
+
+  Criterion 9: Missing Data Handling
+    Description: Evaluates proper handling of missing data in regression analysis.
+    Max Points: 5
+    Levels:
+      [A] (5 points): Correctly handles missing data by: (1) Converting variables to numeric with error handling, (2) Removing rows with missing values (dropna) before regression, and (3) Ensuring sufficient sample size (n ≥ 5) after data cleaning.
+
+      [B] (2 points): Handles missing data but: (1) Uses incorrect method (e.g., imputation when exclusion is appropriate), (2) Fails to check minimum sample size, OR (3) Removes too many or too few observations.
+
+      [C] (0 points): Fails to handle missing data, includes NA values in regression, or does not address missing data.
+
+  Criterion 10: P-value Filtering Criterion
+    Description: Evaluates correct application of statistical significance threshold.
+    Max Points: 12
+    Levels:
+      [A] (12 points): Correctly applies p-value filtering by: (1) Extracting p-value for the metabolite coefficient from regression results, (2) Filtering for p-value < 0.05, and (3) Understanding that this identifies statistically significant associations.
+
+      [B] (6 points): Applies p-value filtering but: (1) Uses incorrect threshold (e.g., < 0.01 or < 0.10), (2) Uses p-value from wrong coefficient (e.g., intercept or covariate), OR (3) Fails to extract p-value correctly.
+
+      [C] (0 points): Fails to apply p-value filtering, uses completely wrong significance criterion, or does not address statistical significance.
+
+  Criterion 11: Positive Coefficient Requirement
+    Description: Evaluates correct filtering for positive correlation with systolic blood pressure.
+    Max Points: 13
+    Levels:
+      [A] (13 points): Correctly applies positive coefficient filter by: (1) Extracting coefficient for metabolite from regression results, (2) Filtering for positive coefficient (coef > 0), and (3) Understanding that positive coefficient indicates positive correlation with systolic BP (higher metabolite = higher BP).
+
+      [B] (6 points): Applies coefficient filtering but: (1) Uses wrong direction (filters for negative instead of positive), (2) Fails to extract metabolite coefficient correctly, OR (3) Does not combine with p-value filter (applies only one criterion).
+
+      [C] (0 points): Fails to filter by coefficient sign, applies completely wrong filtering, or does not address positive correlation requirement.
+
+  Criterion 12: Combined Filtering and Results Interpretation
+    Description: Evaluates correct application of both filtering criteria together and interpretation of results.
+    Max Points: 20
+    Levels:
+      [A] (20 points): Correctly applies combined filtering by: (1) Requiring BOTH p < 0.05 AND positive coefficient, (2) Identifying all metabolites meeting both criteria (e.g., ~41 metabolites), (3) Correctly interpreting that these metabolites show statistically significant positive association with hypertension in bread-spikers, (4) Understanding that results are adjusted for age and BMI, and (5) Presenting results with appropriate statistics (coefficient, p-value, sample size, R-squared).
+
+      [B] (10 points): Applies filtering but: (1) Uses only one criterion instead of both, (2) Incorrectly interprets the direction or meaning of associations, (3) Fails to recognize that results are adjusted for covariates, OR (4) Provides incomplete results presentation.
+
+      [C] (0 points): Fails to combine filtering criteria correctly, provides completely incorrect interpretation, or does not address results interpretation.
+

@@ -1,0 +1,25 @@
+**Answer:**
+
+Cluster Separation:
+
+Yes, rice-spikers and potato-spikers form distinct clusters in the PCA analysis of 464 triglyceride species:
+- PC1 explains 61.39% of variance** and primarily separates the two phenotypes
+- PC2 explains 13.99% of variance**
+- Rice-spikers (n=6) and Potato-spikers (n=32) show moderate visual separation along PC1
+
+Top 10 Lipid Species Contributing to Phenotype Separation:
+
+The following triglyceride species contribute most to variance along PC1:
+
+1. TAG53:4-FA16:0
+2. TAG52:3-FA18:0
+3. TAG53:3-FA16:0
+4. TAG50:4-FA16:0
+5. TAG52:4-FA18:0
+6. TAG50:2-FA18:0
+7. TAG50:3-FA18:0
+8. TAG54:5-FA16:0
+9. TAG50:4-FA18:3
+10. TAG50:4-FA16:1
+
+Key Finding: Short- to medium-chain saturated triglycerides (particularly those containing FA16:0 and FA18:0) are the primary drivers of metabolic differences between rice-spiker and potato-spiker phenotypes.

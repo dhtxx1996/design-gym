@@ -1,0 +1,8 @@
+**Answer:**
+
+Interaction Effect: -16.90 mg/dL
+
+-High insulin resistance: Protein preload reduces peak glucose by 5.37 mg/dL less than fiber preload
+-Low insulin resistance: Protein preload reduces peak glucose by 11.53 mg/dL more than fiber preload
+
+Interpretation: The effectiveness of protein preload versus fiber preload differs by 16.90 mg/dL between insulin resistance groups, with protein showing greater benefit in individuals with low insulin resistance.

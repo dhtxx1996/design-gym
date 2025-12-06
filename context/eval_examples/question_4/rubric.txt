@@ -1,0 +1,155 @@
+Total Points: 100
+
+Notes: The key to a full-score answer is demonstrating a complete understanding of the computational workflow: (1) correctly filtering participants with low beta-cell function using Disposition Index (DI), (2) identifying insulin-resistance-associated triglycerides through correlation with IR markers, (3) constructing a protein-metabolite co-expression network using appropriate correlation thresholds, (4) calculating multiple network centrality metrics (degree, betweenness, closeness, eigenvector), and (5) identifying central network hubs based on composite hub scores. Answers that perform the complete analysis correctly and identify proteins with high connectivity to IR-associated TAGs should receive full credit.
+
+Criteria (15):
+
+  Criterion 1: Participant Filtering for Low Beta-Cell Function
+    Description: Evaluates correct filtering of participants based on beta-cell function metrics.
+    Max Points: 8
+    Levels:
+      [A] (8 points): Correctly filters participants by: (1) Loading metadata and identifying Disposition Index (DI) as the beta-cell function metric, (2) Understanding that lower DI values indicate reduced beta-cell function, (3) Using appropriate threshold (e.g., bottom tertile, median, or bottom quartile) to define "low beta-cell function", (4) Filtering to participants with DI below threshold (e.g., DI <= 33rd percentile or DI <= median), and (5) Documenting the filtering criteria and number of participants included.
+
+      [B] (4 points): Filters participants but: (1) Uses incorrect metric (e.g., fasting insulin alone instead of DI), (2) Uses wrong threshold direction (e.g., high DI instead of low DI), (3) Fails to justify threshold selection, OR (4) Does not document filtering process clearly.
+
+      [C] (0 points): Fails to filter participants, uses all participants regardless of beta-cell function, or does not address participant filtering.
+
+  Criterion 2: Proteomics Data Preprocessing
+    Description: Evaluates correct preprocessing of Olink proteomics data.
+    Max Points: 6
+    Levels:
+      [A] (6 points): Correctly preprocesses proteomics data by: (1) Loading Olink data and recognizing long format (SampleID × Assay × NPX), (2) Pivoting data to wide format (samples × proteins) using NPX values, (3) Handling technical replicates by averaging or extracting participant IDs, (4) Filtering to low beta-cell function participants, (5) Removing proteins with excessive missing values (>50%), and (6) Imputing remaining missing values appropriately (e.g., median imputation).
+
+      [B] (3 points): Preprocesses data but: (1) Fails to pivot from long to wide format, (2) Incorrectly handles replicates, (3) Uses wrong imputation method, OR (4) Does not filter missing values appropriately.
+
+      [C] (0 points): Fails to preprocess proteomics data, uses raw data incorrectly, or does not address proteomics preprocessing.
+
+  Criterion 3: Metabolomics Data Preprocessing and TAG Identification
+    Description: Evaluates correct preprocessing of metabolomics data and identification of triglycerides.
+    Max Points: 7
+    Levels:
+      [A] (7 points): Correctly preprocesses metabolomics data by: (1) Loading metabolomics data and identifying sample columns (XB{subject}_{rep} format), (2) Averaging technical replicates per participant, (3) Filtering to low beta-cell function participants, (4) Identifying triglyceride (TAG) species using appropriate methods (e.g., checking for 'TAG' in metabolite names, Class column, or index), (5) Filtering to TAG metabolites only, (6) Removing metabolites with excessive missing values, and (7) Imputing missing values appropriately.
+
+      [B] (3 points): Preprocesses data but: (1) Fails to average replicates correctly, (2) Uses incorrect method to identify TAGs, (3) Includes non-TAG metabolites, OR (4) Does not handle missing values properly.
+
+      [C] (0 points): Fails to preprocess metabolomics data, does not identify TAGs, or uses completely wrong approach.
+
+  Criterion 4: Insulin Resistance Marker Selection
+    Description: Evaluates correct identification and calculation of insulin resistance markers.
+    Max Points: 5
+    Levels:
+      [A] (5 points): Correctly identifies IR markers by: (1) Extracting available IR markers from metadata (e.g., Hepatic IR, SSPG, fasting glucose, fasting insulin), (2) Calculating HOMA-IR when needed: (fasting glucose × fasting insulin) / 405, (3) Understanding that multiple markers provide robust identification, (4) Aligning IR markers with metabolomics data by participant ID, and (5) Handling missing values appropriately.
+
+      [B] (2 points): Identifies IR markers but: (1) Uses only one marker instead of multiple, (2) Calculates HOMA-IR incorrectly, (3) Fails to align with metabolomics data, OR (4) Does not handle missing values.
+
+      [C] (0 points): Fails to identify IR markers, uses incorrect metrics, or does not address IR marker selection.
+
+  Criterion 5: Insulin-Resistance-Associated TAG Identification
+    Description: Evaluates correct identification of TAGs associated with insulin resistance.
+    Max Points: 10
+    Levels:
+      [A] (10 points): Correctly identifies IR-associated TAGs by: (1) Correlating each TAG abundance with IR markers (HOMA-IR, Hepatic IR, SSPG) using appropriate method (Spearman or Pearson correlation), (2) Calculating correlation coefficient and p-value for each TAG-IR marker pair, (3) Averaging correlations across multiple IR markers or selecting strongest association, (4) Applying appropriate thresholds (e.g., |r| > 0.3 and p < 0.1) to identify significant IR-associated TAGs, (5) Ranking TAGs by absolute correlation strength, and (6) Selecting top IR-associated TAGs for network construction.
+
+      [B] (5 points): Identifies IR-associated TAGs but: (1) Uses only one IR marker instead of multiple, (2) Uses incorrect correlation method, (3) Applies inappropriate thresholds, (4) Fails to consider statistical significance, OR (5) Does not rank or select TAGs appropriately.
+
+      [C] (0 points): Fails to identify IR-associated TAGs, uses completely wrong approach, or does not address TAG-IR association.
+
+  Criterion 6: Data Alignment and Integration
+    Description: Evaluates correct alignment of proteomics and metabolomics datasets.
+    Max Points: 5
+    Levels:
+      [A] (5 points): Correctly aligns datasets by: (1) Finding common participants between proteomics and metabolomics data, (2) Handling participant ID format differences (e.g., 'XB6' vs 'XB6_1'), (3) Averaging technical replicates if needed, (4) Ensuring same participants in both datasets, (5) Applying appropriate transformations (e.g., log1p) to both datasets for network construction.
+
+      [B] (2 points): Aligns datasets but: (1) Fails to find all common participants, (2) Does not handle ID format differences, (3) Uses different participants in each dataset, OR (4) Does not apply consistent transformations.
+
+      [C] (0 points): Fails to align datasets, uses mismatched participants, or does not address data integration.
+
+  Criterion 7: Network Construction Methodology
+    Description: Evaluates correct construction of protein-metabolite co-expression network.
+    Max Points: 10
+    Levels:
+      [A] (10 points): Correctly constructs network by: (1) Calculating pairwise correlations between all proteins and IR-associated TAGs using appropriate method (Spearman recommended for robustness), (2) Applying appropriate correlation threshold (e.g., |r| >= 0.3 or 0.4) to filter weak associations, (3) Applying statistical significance threshold (e.g., p < 0.05 or 0.1) to filter non-significant associations, (4) Creating network edges only for significant correlations above threshold, (5) Storing edge weights (correlation values) and p-values, (6) Using NetworkX or equivalent to create graph structure, and (7) Documenting network properties (nodes, edges, density).
+
+      [B] (5 points): Constructs network but: (1) Uses incorrect correlation method, (2) Applies inappropriate thresholds, (3) Fails to consider statistical significance, (4) Does not store edge weights, OR (5) Creates network structure incorrectly.
+
+      [C] (0 points): Fails to construct network, uses completely wrong approach, or does not address network construction.
+
+  Criterion 8: Network Centrality Metric Calculation
+    Description: Evaluates correct calculation of multiple network centrality metrics.
+    Max Points: 12
+    Levels:
+      [A] (12 points): Correctly calculates centrality metrics by: (1) Calculating degree centrality (number of connections) for each protein, (2) Calculating betweenness centrality (importance in shortest paths) using distance weights (1 - |correlation|), (3) Calculating closeness centrality (average distance to all nodes) using distance weights, (4) Calculating eigenvector centrality (importance based on connections to important nodes) using absolute correlation weights, (5) Handling negative correlations appropriately (converting to distances or using absolute values), (6) Calculating actual degree (number of edges) for each protein, and (7) Storing all metrics in a comprehensive DataFrame.
+
+      [B] (6 points): Calculates centrality but: (1) Calculates only one or two metrics instead of multiple, (2) Uses incorrect weight handling for negative correlations, (3) Fails to use distance weights for path-based metrics, (4) Does not calculate all required metrics, OR (5) Stores metrics incorrectly.
+
+      [C] (0 points): Fails to calculate centrality metrics, uses completely wrong approach, or does not address centrality calculation.
+
+  Criterion 9: Hub Score Calculation
+    Description: Evaluates correct calculation of composite hub scores.
+    Max Points: 6
+    Levels:
+      [A] (6 points): Correctly calculates hub scores by: (1) Normalizing all centrality metrics to 0-1 scale for fair comparison, (2) Calculating composite hub score as average of normalized centralities (degree, betweenness, closeness, eigenvector), (3) Understanding that hub score integrates multiple centrality perspectives, (4) Sorting proteins by hub score (descending), and (5) Using hub score to rank proteins for hub identification.
+
+      [B] (3 points): Calculates hub scores but: (1) Fails to normalize metrics before averaging, (2) Uses incorrect aggregation method (e.g., sum instead of mean), (3) Includes wrong metrics in composite score, OR (4) Does not sort or rank proteins appropriately.
+
+      [C] (0 points): Fails to calculate hub scores, uses completely wrong approach, or does not address hub score calculation.
+
+  Criterion 10: Hub Protein Identification
+    Description: Evaluates correct identification of central network hub proteins.
+    Max Points: 8
+    Levels:
+      [A] (8 points): Correctly identifies hub proteins by: (1) Defining hub proteins as top 10% by hub score or top N proteins (e.g., top 10-20), (2) Selecting proteins with highest composite hub scores, (3) Verifying that hub proteins have high degree (many connections to TAGs), (4) Listing all identified hub proteins with their metrics, (5) Understanding that hubs are proteins with high connectivity to IR-associated TAGs, and (6) Documenting the hub identification criteria clearly.
+
+      [B] (4 points): Identifies hub proteins but: (1) Uses only one centrality metric instead of composite score, (2) Uses inappropriate threshold for hub selection, (3) Fails to verify high connectivity, OR (4) Does not clearly document identification criteria.
+
+      [C] (0 points): Fails to identify hub proteins, uses completely wrong criteria, or does not address hub identification.
+
+  Criterion 11: Hub Protein Characterization
+    Description: Evaluates comprehensive characterization of identified hub proteins.
+    Max Points: 7
+    Levels:
+      [A] (7 points): Comprehensively characterizes hubs by: (1) For each hub protein, reporting degree (number of TAG connections), (2) Reporting all centrality metrics (degree, betweenness, closeness, eigenvector), (3) Reporting hub score, (4) Listing connected TAGs for each hub, (5) Reporting correlation strengths with connected TAGs, (6) Identifying patterns (e.g., positive vs negative correlations), and (7) Providing quantitative metrics for all hubs.
+
+      [B] (3 points): Characterizes hubs but: (1) Provides incomplete metrics, (2) Fails to list connected TAGs, (3) Does not report correlation strengths, OR (4) Provides only qualitative descriptions.
+
+      [C] (0 points): Fails to characterize hub proteins, provides incorrect information, or does not address hub characterization.
+
+  Criterion 12: Network Visualization
+    Description: Evaluates creation of informative network visualizations.
+    Max Points: 5
+    Levels:
+      [A] (5 points): Creates comprehensive visualizations by: (1) Creating network graph with distinct node types (proteins vs TAGs), (2) Highlighting hub proteins visually (e.g., larger nodes, different colors), (3) Using appropriate layout (e.g., spring layout) for clarity, (4) Creating hub score distribution plot, (5) Adding proper labels, legends, and titles, and (6) Making visualizations interpretable and publication-ready.
+
+      [B] (2 points): Creates visualizations but: (1) Missing some visualization types, (2) Poor visual quality (unclear labels, no legend), (3) Does not highlight hub proteins, OR (4) Visualizations are difficult to interpret.
+
+      [C] (0 points): Fails to create visualizations, provides unclear plots, or does not address network visualization.
+
+  Criterion 13: Statistical Validation
+    Description: Evaluates appropriate statistical validation of network and hub identification.
+    Max Points: 4
+    Levels:
+      [A] (4 points): Validates statistically by: (1) Reporting network statistics (number of nodes, edges, density), (2) Reporting edge statistics (mean/median correlation, positive vs negative), (3) Verifying that hub proteins have significantly more connections than non-hub proteins, and (4) Providing statistical context for hub identification (e.g., top 10% threshold).
+
+      [B] (2 points): Validates but: (1) Provides incomplete statistics, (2) Fails to compare hub vs non-hub proteins, OR (3) Does not provide statistical context.
+
+      [C] (0 points): Fails to provide statistical validation, uses completely wrong statistics, or does not address statistical validation.
+
+  Criterion 14: Biological Interpretation
+    Description: Evaluates comprehensive biological interpretation of hub proteins.
+    Max Points: 10
+    Levels:
+      [A] (10 points): Provides comprehensive interpretation by: (1) Explaining that hub proteins function as central nodes connecting proteomic and metabolomic signatures, (2) Interpreting that high connectivity to IR-associated TAGs suggests central roles in metabolic regulation, (3) Discussing how hub proteins may represent critical nodes in insulin resistance pathways, (4) Explaining potential biological mechanisms (e.g., metabolic enzymes, signaling proteins, transport proteins), (5) Connecting hub proteins to insulin resistance and beta-cell function pathways, (6) Discussing therapeutic implications (hub proteins as potential targets), (7) Acknowledging limitations (small sample size, correlation vs causation), and (8) Integrating findings into coherent biological narrative.
+
+      [B] (5 points): Provides interpretation but: (1) Lacks depth in biological mechanisms, (2) Fails to connect hubs to metabolic pathways, (3) Does not discuss therapeutic implications, (4) Missing discussion of limitations, OR (5) Superficial interpretation without depth.
+
+      [C] (0 points): Fails to provide biological interpretation, provides incorrect mechanisms, or does not address biological rationale.
+
+  Criterion 15: Results Presentation and Integration
+    Description: Evaluates complete and accurate presentation of all results.
+    Max Points: 6
+    Levels:
+      [A] (6 points): Presents results comprehensively by: (1) Summarizing participant filtering (number with low beta-cell function), (2) Reporting number of IR-associated TAGs identified, (3) Reporting network properties (nodes, edges, proteins in network), (4) Listing all identified hub proteins with complete metrics, (5) Providing quantitative results (degrees, hub scores, centrality values), (6) Organizing results in clear, logical manner, and (7) Integrating all findings into coherent summary.
+
+      [B] (3 points): Presents results but: (1) Provides incomplete statistics, (2) Fails to list all hub proteins, (3) Provides only qualitative descriptions, (4) Results are poorly organized, OR (5) Missing integration of findings.
+
+      [C] (0 points): Fails to present results, provides incorrect results, or does not address results presentation.

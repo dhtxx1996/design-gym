@@ -1,0 +1,145 @@
+Total Points: 100
+
+Notes: The key to a full-score answer is demonstrating a complete understanding of the computational workflow: (1) correctly filtering to triglyceride (TAG) species only from the lipid data, (2) properly preprocessing data (averaging replicates, log transformation, standardization), (3) using phenotype labels from metadata (ethnicity-based) rather than unsupervised clustering, (4) performing PCA and correctly interpreting variance explained, (5) statistically validating cluster separation between rice-spikers and potato-spikers, and (6) identifying top contributing TAG species with correct interpretation of loadings. Answers that perform the complete analysis correctly and identify short/medium-chain saturated TAGs as key discriminators should receive full credit.
+
+Criteria (14):
+
+  Criterion 1: Lipid Data Filtering to TAGs Only
+    Description: Evaluates correct filtering of lipid data to include only triglyceride (TAG) species.
+    Max Points: 8
+    Levels:
+      [A] (8 points): Correctly filters to TAG species only by: (1) Using index.str.startswith('TAG') or equivalent method to identify TAG species, (2) Filtering from all 652 lipids to approximately 464 TAG species, (3) Understanding that the question specifically asks for "triglyceride profile data", and (4) Documenting the filtering step clearly.
+
+      [B] (4 points): Attempts to filter but: (1) Uses incorrect filtering method, (2) Filters to wrong lipid class, OR (3) Uses all lipids instead of TAGs only.
+
+      [C] (0 points): Fails to filter to TAGs, uses all 652 lipids in analysis, or does not address TAG filtering.
+
+  Criterion 2: Technical Replicate Averaging
+    Description: Evaluates correct averaging of technical replicates per participant.
+    Max Points: 7
+    Levels:
+      [A] (7 points): Correctly averages replicates by: (1) Recognizing that samples like 'XB59_1', 'XB59_2' are technical replicates of participant 'XB59', (2) Extracting participant ID by splitting on '_' and taking first part, (3) Grouping columns by participant ID and calculating mean across replicates, (4) Reducing from 113 samples to approximately 38-66 unique participants, and (5) Understanding that this prevents inflated sample size and reduces noise.
+
+      [B] (3 points): Attempts to average but: (1) Uses incorrect grouping method, (2) Uses wrong aggregation (e.g., sum, max, or median instead of mean), (3) Fails to properly extract participant IDs, OR (4) Treats replicates as separate participants.
+
+      [C] (0 points): Fails to average replicates, uses all 113 samples as separate participants, or does not address replicate averaging.
+
+  Criterion 3: Missing Value Handling
+    Description: Evaluates proper handling of missing values in the data.
+    Max Points: 3
+    Levels:
+      [A] (3 points): Correctly handles missing values by: (1) Identifying missing values in the dataset, (2) Using appropriate imputation method (e.g., median imputation per TAG species), and (3) Removing TAG species with all missing or constant values.
+
+      [B] (1 point): Handles missing values but: (1) Uses inappropriate imputation method, (2) Fails to remove constant/zero-variance TAGs, OR (3) Does not document missing value handling.
+
+      [C] (0 points): Fails to handle missing values, includes NA values in PCA, or does not address missing data.
+
+  Criterion 4: Log Transformation Application
+    Description: Evaluates correct application of log transformation to handle skewed lipidomics data.
+    Max Points: 4
+    Levels:
+      [A] (4 points): Correctly applies log transformation by: (1) Recognizing that lipidomics data is typically log-normally distributed, (2) Using log1p (log(1+x)) or log transformation, (3) Understanding that this stabilizes variance and handles zeros gracefully, and (4) Applying transformation before standardization.
+
+      [B] (2 points): Applies transformation but: (1) Uses incorrect transformation method, (2) Applies transformation after standardization (wrong order), OR (3) Does not justify the need for transformation.
+
+      [C] (0 points): Fails to apply log transformation, uses raw skewed data in PCA, or does not address data transformation.
+
+  Criterion 5: Data Standardization
+    Description: Evaluates correct standardization of data before PCA.
+    Max Points: 3
+    Levels:
+      [A] (3 points): Correctly standardizes data by: (1) Using StandardScaler or equivalent (mean=0, std=1), (2) Applying standardization after log transformation, (3) Understanding that PCA is sensitive to scale differences between TAG species, and (4) Verifying standardization (mean ≈ 0, std ≈ 1).
+
+      [B] (1 point): Standardizes but: (1) Uses incorrect standardization method, (2) Applies standardization in wrong order (before log transform), OR (3) Fails to verify standardization.
+
+      [C] (0 points): Fails to standardize data, uses raw data with different scales in PCA, or does not address standardization.
+
+  Criterion 6: Phenotype Label Extraction from Metadata
+    Description: Evaluates correct extraction and mapping of phenotype labels from metadata.
+    Max Points: 6
+    Levels:
+      [A] (6 points): Correctly extracts phenotype labels by: (1) Loading metadata file and identifying 'Ethnicity' column, (2) Merging lipid data with metadata on participant ID, (3) Mapping ethnicity to phenotypes: Asian → Rice-spiker, White/Hispanic → Potato-spiker, (4) Filtering to participants with known ethnicity, and (5) Creating phenotype labels for visualization and analysis.
+
+      [B] (3 points): Extracts labels but: (1) Uses incorrect mapping (e.g., reverses phenotypes), (2) Fails to merge metadata correctly, (3) Does not filter missing ethnicity, OR (4) Uses unclear phenotype definitions.
+
+      [C] (0 points): Fails to extract phenotype labels, ignores metadata completely, or does not address phenotype definition.
+
+  Criterion 7: Phenotype Mapping Justification
+    Description: Evaluates justification for using ethnicity as a proxy for carbohydrate response phenotypes.
+    Max Points: 4
+    Levels:
+      [A] (4 points): Provides clear justification by: (1) Explaining that ethnicity serves as biological proxy for carbohydrate response patterns, (2) Citing genetic/dietary associations (e.g., Asian populations and rice consumption), (3) Acknowledging that this is a proxy approach, and (4) Documenting the mapping approach clearly.
+
+      [B] (2 points): Provides justification but: (1) Lacks clear explanation of proxy rationale, (2) Does not acknowledge limitations of proxy approach, OR (3) Provides weak or unclear justification.
+
+      [C] (0 points): Fails to justify phenotype mapping, uses arbitrary grouping, or does not address justification.
+
+  Criterion 8: PCA Execution
+    Description: Evaluates correct execution of PCA on standardized TAG data.
+    Max Points: 5
+    Levels:
+      [A] (5 points): Correctly performs PCA by: (1) Using sklearn.decomposition.PCA or equivalent, (2) Fitting PCA on standardized TAG data (participants × TAG species), (3) Computing sufficient components to capture most variance (e.g., 50 components or min(n_samples, n_features)), (4) Extracting principal component scores and loadings, and (5) Creating PCA results DataFrame with participant scores.
+
+      [B] (2 points): Performs PCA but: (1) Uses incorrect data format (e.g., transposed), (2) Computes insufficient components, (3) Fails to extract scores/loadings correctly, OR (4) Uses wrong PCA implementation.
+
+      [C] (0 points): Fails to perform PCA, uses completely wrong method, or does not address PCA execution.
+
+  Criterion 9: Variance Explained Interpretation
+    Description: Evaluates correct interpretation of explained variance, particularly for TAG-only analysis.
+    Max Points: 8
+    Levels:
+      [A] (8 points): Correctly interprets variance by: (1) Reporting PC1 explains ~60-65% of variance (indicating TAG-only analysis), (2) Reporting PC1 + PC2 explain ~75-80% of variance, (3) Reporting first 5 PCs explain ~90% of variance, (4) Understanding that TAG-only analysis gives higher PC1 variance than all-lipids analysis (~40-45%), (5) Providing scree plot and cumulative variance plots, and (6) Correctly interpreting that PC1 captures most phenotype separation.
+
+      [B] (4 points): Interprets variance but: (1) Reports values inconsistent with TAG-only analysis (e.g., PC1 ~40-50%), (2) Missing variance interpretation, (3) Does not connect variance to phenotype separation, OR (4) Fails to provide visualizations.
+
+      [C] (0 points): Reports incorrect variance values, provides no variance interpretation, or does not address explained variance.
+
+  Criterion 10: Visual Cluster Separation Assessment
+    Description: Evaluates correct visualization and assessment of cluster separation in PCA space.
+    Max Points: 6
+    Levels:
+      [A] (6 points): Correctly visualizes separation by: (1) Creating 2D scatter plots (PC1 vs PC2, PC1 vs PC3) colored by phenotype, (2) Creating 3D scatter plot of first 3 PCs, (3) Using distinct colors for rice-spikers (red) and potato-spikers (blue), (4) Adding proper labels, legends, and titles, (5) Observing clear visual separation along PC1 axis, and (6) Quantifying separation distance (e.g., ~10-12 units on PC1).
+
+      [B] (3 points): Visualizes but: (1) Missing some plots (e.g., no 3D plot), (2) Poor visualization quality (unclear labels, no legend), (3) Does not quantify separation distance, OR (4) Fails to observe clear separation.
+
+      [C] (0 points): Fails to create visualizations, provides unclear plots, or does not address visual separation.
+
+  Criterion 11: Statistical Validation of Cluster Separation
+    Description: Evaluates correct statistical testing to validate cluster separation.
+    Max Points: 8
+    Levels:
+      [A] (8 points): Correctly validates separation by: (1) Performing t-test or ANOVA comparing PC1 scores between rice-spikers and potato-spikers, (2) Performing statistical test on PC2 scores, (3) Reporting t-statistic/F-statistic and p-values, (4) Reporting group means and standard deviations, (5) Calculating separation distance (difference in means), (6) Interpreting statistical significance (p < 0.05 indicates significant separation), and (7) Concluding that clusters are distinct if statistically significant.
+
+      [B] (4 points): Validates but: (1) Uses incorrect statistical test, (2) Fails to test both PC1 and PC2, (3) Does not report all necessary statistics, (4) Incorrectly interprets p-values, OR (5) Missing separation distance calculation.
+
+      [C] (0 points): Fails to perform statistical validation, uses completely wrong test, or does not address statistical testing.
+
+  Criterion 12: Loading Calculation and Extraction
+    Description: Evaluates correct calculation and extraction of PCA loadings for TAG species.
+    Max Points: 5
+    Levels:
+      [A] (5 points): Correctly extracts loadings by: (1) Understanding that loadings represent contribution of each TAG to principal components, (2) Extracting loadings from pca.components_ (transposed to TAG × PC format), (3) Creating loadings DataFrame with TAG species as index and PCs as columns, (4) Calculating absolute loadings for PC1 and PC2, and (5) Understanding that PC1 loadings drive phenotype separation.
+
+      [B] (2 points): Extracts loadings but: (1) Uses incorrect extraction method, (2) Fails to transpose components correctly, (3) Does not calculate absolute loadings, OR (4) Does not understand what loadings represent.
+
+      [C] (0 points): Fails to extract loadings, uses completely wrong approach, or does not address loading extraction.
+
+  Criterion 13: Top Contributing TAG Identification
+    Description: Evaluates correct identification of TAG species contributing most to phenotype separation.
+    Max Points: 12
+    Levels:
+      [A] (12 points): Correctly identifies top TAGs by: (1) Ranking TAGs by PC1 absolute loadings (most important for separation), (2) Identifying top 10-20 TAG species, (3) Correctly identifying short/medium-chain saturated TAGs (e.g., TAG53:4-FA16:0, TAG52:3-FA18:0, TAG50:4-FA16:0) as top contributors, (4) Providing loading values with correct signs (positive/negative), (5) Creating loading plots (bar plots) showing top contributors, (6) Creating biplot combining scores and loadings, and (7) Linking TAG fatty acid composition (FA16:0, FA18:0) to phenotype differences.
+
+      [B] (6 points): Identifies TAGs but: (1) Focuses on wrong TAGs (e.g., long-chain PUFAs only), (2) Uses combined PC1+PC2 metric instead of focusing on PC1, (3) Lists TAGs but doesn't interpret fatty acid patterns, (4) Missing loading visualizations, OR (5) Does not provide loading values.
+
+      [C] (0 points): Identifies wrong lipid classes (e.g., CEs, phospholipids), lists lipids from all-lipids analysis, provides no TAG identification, or incorrectly interprets loadings.
+
+  Criterion 14: Biological Interpretation and Integration
+    Description: Evaluates comprehensive biological interpretation of PCA results and TAG contributions.
+    Max Points: 19
+    Levels:
+      [A] (19 points): Provides comprehensive interpretation by: (1) Correctly concluding that rice-spikers and potato-spikers form distinct clusters, (2) Explaining that separation is primarily along PC1 (~60% variance), (3) Interpreting that short/medium-chain saturated TAGs (FA16:0, FA18:0) are key discriminators, (4) Explaining that these TAGs are elevated in rice-spikers (Asians) vs potato-spikers, (5) Discussing how TAG differences reflect metabolic differences between carbohydrate response phenotypes, (6) Connecting findings to genetic variations, dietary patterns, and carbohydrate-specific metabolic responses, (7) Providing quantitative results (separation distance, variance explained, loading values), (8) Integrating all findings into coherent biological narrative, and (9) Acknowledging limitations (small sample size, ethnicity proxy assumptions).
+
+      [B] (9 points): Provides interpretation but: (1) Lacks depth in biological mechanisms, (2) Fails to connect TAG patterns to phenotype differences, (3) Does not integrate findings into broader context, (4) Provides only qualitative descriptions without quantitative data, (5) Missing discussion of limitations, OR (6) Superficial interpretation without depth.
+
+      [C] (0 points): Fails to provide biological interpretation, provides incorrect mechanisms, does not connect findings to phenotypes, or does not address biological rationale.

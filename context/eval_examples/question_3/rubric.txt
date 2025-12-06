@@ -1,0 +1,125 @@
+Total Points: 100
+
+Notes: The key to a full-score answer is demonstrating a complete understanding of the computational workflow: (1) correctly identifying potato-spikers and grape-spikers using the median threshold method on glucose peak responses, (2) performing differential abundance analysis between the two groups to identify the top 10 most differentially abundant metabolites (by p-value), (3) identifying which of the top 10 are lipid species, (4) determining the direction of abundance changes (higher/lower in which group), and (5) analyzing statistical correlations between identified lipids and metabolic phenotypes (SSPG, Hepatic IR, DI, IE) to identify mediating lipids. Answers that correctly perform the analysis and identify lipid species that statistically mediate differences in insulin resistance and beta-cell function should receive full credit.
+
+Criteria (12):
+
+  Criterion 1: Spiker Group Identification
+    Description: Evaluates correct identification of potato-spikers and grape-spikers based on glucose response patterns.
+    Max Points: 8
+    Levels:
+      [A] (8 points): Correctly identifies spikers by: (1) Calculating peak glucose delta from baseline for each subject-rep combination for potatoes and grapes separately, (2) Averaging peak responses across replicates per subject for each food type, (3) Calculating median peak response for each food type, (4) Classifying subjects with average peak response above median as spikers for that food type, and (5) Correctly identifying that potato-spikers have higher glucose responses to potatoes and grape-spikers have higher glucose responses to grapes.
+
+      [B] (4 points): Identifies spikers but: (1) Uses incorrect threshold method (e.g., fixed threshold instead of median), (2) Fails to average across replicates before classification, (3) Uses absolute glucose instead of delta from baseline, OR (4) Incorrectly applies the classification (e.g., below median instead of above).
+
+      [C] (0 points): Fails to identify spiker groups, uses completely wrong methodology, or does not address spiker classification.
+
+  Criterion 2: Metabolomics Data Processing
+    Description: Evaluates correct processing of metabolomics data to create subject-level abundances.
+    Max Points: 6
+    Levels:
+      [A] (6 points): Correctly processes metabolomics data by: (1) Identifying abundance columns with format XB{subject}_{rep}, (2) Grouping columns by subject ID, (3) Averaging metabolite abundances across all replicates for each subject, (4) Handling missing values appropriately (using only valid non-NA values), and (5) Creating a subject-level metabolite abundance matrix.
+
+      [B] (3 points): Processes data but: (1) Uses incorrect aggregation method (e.g., sum, median, or max instead of mean), (2) Fails to properly group by subject, (3) Incorrectly handles missing values, OR (4) Creates incomplete subject-level matrix.
+
+      [C] (0 points): Fails to process metabolomics data, uses raw replicate-level data for analysis, or does not address data processing.
+
+  Criterion 3: Differential Abundance Analysis
+    Description: Evaluates correct statistical comparison between potato-spikers and grape-spikers.
+    Max Points: 10
+    Levels:
+      [A] (10 points): Correctly performs differential abundance analysis by: (1) Comparing metabolite abundances between potato-spikers and grape-spikers for each metabolite, (2) Using appropriate statistical test (t-test for normally distributed data, Mann-Whitney U for non-normal), (3) Calculating fold change (potato-spikers / grape-spikers), (4) Calculating log2 fold change, (5) Obtaining p-value for each comparison, and (6) Applying FDR correction for multiple testing.
+
+      [B] (5 points): Performs analysis but: (1) Uses incorrect statistical test, (2) Fails to calculate fold change, (3) Does not apply multiple testing correction, OR (4) Uses wrong group comparison (e.g., reverses groups).
+
+      [C] (0 points): Fails to perform differential abundance analysis, uses completely wrong statistical approach, or does not address group comparison.
+
+  Criterion 4: Top 10 Metabolite Selection
+    Description: Evaluates correct identification of top 10 differentially abundant metabolites.
+    Max Points: 7
+    Levels:
+      [A] (7 points): Correctly identifies top 10 by: (1) Sorting all metabolites by p-value (ascending, smallest first), (2) Selecting the 10 metabolites with smallest p-values regardless of significance threshold, (3) Understanding that this captures the most differentially abundant metabolites even if none are strictly significant after FDR correction, and (4) Presenting all 10 metabolites with their statistics.
+
+      [B] (3 points): Selects top 10 but: (1) Uses incorrect ranking method (e.g., by fold change instead of p-value), (2) Applies significance threshold before selecting top 10, OR (3) Selects wrong number of metabolites.
+
+      [C] (0 points): Fails to identify top 10 metabolites, uses completely wrong selection criteria, or does not address top 10 selection.
+
+  Criterion 5: Lipid Species Identification
+    Description: Evaluates correct identification of lipid metabolites among the top 10.
+    Max Points: 12
+    Levels:
+      [A] (12 points): Correctly identifies lipids by: (1) Applying lipid classification criteria (checking for lipid keywords: CE, CER, DAG, TAG, PC, LPC, PE, LPE, SM, FA, AC, CAR, carnitine, acyl, etc.), (2) Identifying which of the top 10 metabolites are lipids, (3) Providing specific lipid names with molecular identifiers (e.g., "C16:0 AC (L-Palmitoylcarnitine)"), (4) Identifying lipid class (e.g., acylcarnitines, triglycerides, phospholipids), and (5) Reporting the number of lipid species found in top 10.
+
+      [B] (6 points): Identifies lipids but: (1) Uses incomplete or incorrect lipid classification criteria, (2) Fails to provide specific molecular identifiers, (3) Does not identify lipid class, OR (4) Incorrectly classifies some metabolites as lipids.
+
+      [C] (0 points): Fails to identify any lipid species, identifies wrong metabolite class, or does not address lipid identification.
+
+  Criterion 6: Abundance Directionality
+    Description: Evaluates correct statement of abundance direction for identified lipids.
+    Max Points: 8
+    Levels:
+      [A] (8 points): Correctly states direction by: (1) For each identified lipid, explicitly stating whether it is higher or lower in potato-spikers compared to grape-spikers, (2) Providing fold change values (potato-spikers / grape-spikers), (3) Interpreting fold change > 1 as higher in potato-spikers and < 1 as higher in grape-spikers, and (4) Correctly interpreting the biological significance of the direction.
+
+      [B] (4 points): States direction but: (1) Provides ambiguous statements without clear higher/lower designation, (2) Fails to provide fold change values, (3) Reverses the direction (e.g., states higher in grape-spikers when actually higher in potato-spikers), OR (4) Does not interpret biological significance.
+
+      [C] (0 points): States incorrect direction, claims no difference when differences exist, or does not address directionality.
+
+  Criterion 7: Phenotype Correlation Analysis
+    Description: Evaluates correct correlation analysis between lipids and metabolic phenotypes.
+    Max Points: 10
+    Levels:
+      [A] (10 points): Correctly performs correlation analysis by: (1) For each identified lipid in top 10, calculating correlations with insulin resistance markers (SSPG, Hepatic IR) and beta-cell function markers (DI, IE), (2) Using appropriate correlation method (Pearson correlation), (3) Obtaining correlation coefficient (r) and p-value for each association, (4) Handling missing data appropriately, and (5) Ensuring sufficient sample size (n ≥ 5) for meaningful correlation.
+
+      [B] (5 points): Performs correlation but: (1) Uses incorrect correlation method, (2) Fails to test all required phenotypes (SSPG, Hepatic IR, DI, IE), (3) Incorrectly handles missing data, OR (4) Does not report correlation statistics (r and p-value).
+
+      [C] (0 points): Fails to perform correlation analysis, uses completely wrong approach, or does not address phenotype associations.
+
+  Criterion 8: Mediating Lipid Identification
+    Description: Evaluates correct identification of lipids that statistically mediate differences.
+    Max Points: 15
+    Levels:
+      [A] (15 points): Correctly identifies mediating lipids by: (1) Requiring that lipids are in the top 10 differentially abundant metabolites, (2) Requiring that lipids show significant correlation (p < 0.05) with at least one metabolic phenotype (SSPG, Hepatic IR, DI, or IE), (3) Identifying all lipids that meet both criteria, (4) Reporting correlation coefficients and p-values for each significant association, and (5) Correctly interpreting that these lipids statistically mediate the relationship between glucose response patterns and metabolic phenotypes.
+
+      [B] (7 points): Identifies mediating lipids but: (1) Uses only one criterion (differential abundance OR correlation, not both), (2) Uses incorrect significance threshold, (3) Fails to report correlation statistics, OR (4) Incorrectly interprets mediation role.
+
+      [C] (0 points): Fails to identify mediating lipids, uses completely wrong criteria, or does not address mediation analysis.
+
+  Criterion 9: Statistical Methods Application
+    Description: Evaluates correct application of statistical methods throughout the analysis.
+    Max Points: 6
+    Levels:
+      [A] (6 points): Correctly applies statistical methods by: (1) Using appropriate test for group comparison (t-test or Mann-Whitney U based on normality), (2) Applying FDR correction for multiple testing, (3) Using Pearson correlation for phenotype associations, (4) Reporting all relevant statistics (p-values, fold changes, correlation coefficients), and (5) Understanding when to use each statistical method.
+
+      [B] (3 points): Applies statistical methods but: (1) Uses incorrect test for group comparison, (2) Fails to apply multiple testing correction, (3) Uses wrong correlation method, OR (4) Does not report all necessary statistics.
+
+      [C] (0 points): Uses completely inappropriate statistical methods, fails to apply any statistical tests, or does not address statistical analysis.
+
+  Criterion 10: Multiple Testing Correction Understanding
+    Description: Evaluates understanding and application of multiple testing correction.
+    Max Points: 5
+    Levels:
+      [A] (5 points): Demonstrates understanding by: (1) Recognizing that testing 974 metabolites requires multiple testing correction, (2) Applying Benjamini-Hochberg FDR correction, (3) Understanding the difference between uncorrected and FDR-adjusted p-values, (4) Correctly interpreting that top 10 selection is based on uncorrected p-values to capture most different metabolites, and (5) Reporting both uncorrected and FDR-adjusted p-values.
+
+      [B] (2 points): Applies correction but: (1) Uses incorrect correction method, (2) Fails to understand why correction is needed, (3) Does not report both p-value types, OR (4) Incorrectly interprets corrected vs uncorrected results.
+
+      [C] (0 points): Fails to apply multiple testing correction, does not understand the concept, or does not address multiple testing.
+
+  Criterion 11: Biological Interpretation
+    Description: Evaluates explanation of biological mechanisms linking lipids to metabolic phenotypes.
+    Max Points: 8
+    Levels:
+      [A] (8 points): Provides comprehensive biological interpretation by: (1) Explaining how identified lipid species relate to insulin resistance mechanisms (e.g., acylcarnitines and mitochondrial function, fatty acid metabolism), (2) Explaining how lipids relate to beta-cell function, (3) Discussing how lipid differences contribute to metabolic phenotype differences between groups, (4) Integrating findings into a coherent biological narrative, and (5) Connecting lipid metabolism to glucose response patterns.
+
+      [B] (4 points): Provides interpretation but: (1) Gives limited mechanistic explanation, (2) Fails to connect lipids to specific metabolic pathways, (3) Does not integrate findings into broader biological context, OR (4) Provides superficial interpretation without depth.
+
+      [C] (0 points): Fails to provide biological interpretation, provides incorrect mechanisms, or does not address biological rationale.
+
+  Criterion 12: Results Presentation and Integration
+    Description: Evaluates complete and accurate presentation of all results.
+    Max Points: 5
+    Levels:
+      [A] (5 points): Presents results comprehensively by: (1) Listing all top 10 differentially abundant metabolites with complete statistics (means, fold changes, p-values, FDR-adjusted p-values), (2) Clearly identifying which are lipids, (3) Presenting correlation results for all tested phenotypes, (4) Clearly stating which lipids are mediating lipids (if any), (5) Providing quantitative results (not just qualitative descriptions), and (6) Organizing results in a clear, logical manner.
+
+      [B] (2 points): Presents results but: (1) Provides incomplete statistics, (2) Fails to clearly identify lipids, (3) Does not present correlation results, (4) Provides only qualitative descriptions without quantitative data, OR (5) Results are poorly organized.
+
+      [C] (0 points): Fails to present results, provides incorrect results, or does not address results presentation.

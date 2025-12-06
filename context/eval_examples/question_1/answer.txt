@@ -1,0 +1,16 @@
+**Answer**
+
+After adjusting for age and BMI, the following 10 metabolites showed statistically significant positive correlations with systolic blood pressure:
+
+1. cis-4-Hydroxyproline
+2. Proline
+3. Proline derivative
+4. Kynurenic acid
+5. Deoxycholic acid 3-glucuronide
+6. N-Acetylgalactosaminitol
+7. Creatinine
+8. Creatinine
+9. Chenodeoxycholic acid 24-acyl-β-D-glucuronide
+10. Asp-Arg dipeptide
+
+The strongest association was observed with cis-4-Hydroxyproline.

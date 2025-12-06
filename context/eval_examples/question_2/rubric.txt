@@ -1,0 +1,57 @@
+Total Points: 100
+
+
+Notes: The key to a full-score answer is demonstrating a complete understanding of the interaction effect analysis: (1) correctly classifying baseline insulin resistance status using DI (Disposition Index) or SSPG, (2) accurately calculating peak glucose for both protein-preloaded and fiber-preloaded rice conditions, (3) correctly computing peak glucose reduction (Fiber peak - Protein peak), (4) performing two-way ANOVA with interaction term to test for moderation, and (5) calculating and interpreting the interaction effect size (partial eta-squared). Answers that correctly identify that protein preload benefits Low IR subjects more than High IR subjects (interaction effect of -16.90 mg/dL) and provide appropriate statistical interpretation should receive full credit.
+
+Criteria (5):
+
+  Criterion 1: Baseline Insulin Resistance Status Classification (20 points)
+    Description: Evaluates the correct identification and classification of baseline insulin resistance status for each subject.
+    
+    Levels:
+      [A] (20 points): Completes all sub-steps correctly: (1) Uses DI as primary marker with correct interpretation (lower = higher IR), (2) Applies median split methodology correctly, (3) Uses SSPG appropriately for missing DI data, (4) Correctly identifies 19 subjects with complete data (6 High IR, 13 Low IR), and (5) Demonstrates understanding that IR status is a categorical moderator variable.
+
+      [B] (10 points): Completes most sub-steps but has errors in: (1) Using incorrect marker (e.g., only fasting glucose/HbA1c without DI/SSPG), (2) Wrong threshold method (not median split, or incorrect median calculation), (3) Inadequate handling of missing data, OR (4) Correctly describes concept but implementation has unclear or incorrect details.
+
+      [C] (0 points): Fails to complete critical sub-steps: Does not correctly classify IR status, uses completely wrong methodology, or does not address baseline insulin resistance status as a categorical variable.
+
+  Criterion 2: Peak Glucose Calculation (25 points)
+    Description: Evaluates the correct calculation of peak glucose values for both protein-preloaded and fiber-preloaded rice conditions.
+    
+    Levels:
+      [A] (25 points): Completes all sub-steps correctly: (1) Correctly filters and separates protein vs fiber rice conditions, (2) Uses correct time windows (baseline ≤ 0, peak ≥ 0), (3) Calculates baseline as mean of pre-meal values, (4) Calculates peak as maximum post-meal glucose (not average), (5) Properly averages across replicates per subject per condition, and (6) Correctly identifies 19 subjects with complete data for both conditions.
+
+      [B] (12 points): Completes most sub-steps but has errors in: (1) Incorrect time windows for baseline/peak (includes wrong time points), (2) Fails to separate protein and fiber conditions correctly, (3) Uses incorrect aggregation (e.g., sum instead of mean, or wrong handling of replicates), OR (4) Describes method correctly but implementation details are unclear or missing key steps.
+
+      [C] (0 points): Fails critical sub-steps: Does not calculate peak glucose correctly, uses completely wrong methodology (e.g., average instead of maximum, wrong time points), or does not address peak glucose calculation for both conditions.
+
+  Criterion 3: Peak Glucose Reduction Calculation (20 points)
+    Description: Evaluates the correct calculation of peak glucose reduction magnitude between protein and fiber conditions.
+    
+    
+    Levels:
+      [A] (20 points): Completes all sub-steps correctly: (1) Calculates reduction per subject using correct formula (Fiber - Protein), (2) Correctly interprets positive values (protein beneficial) and negative values (protein less effective), (3) Correctly identifies Low IR mean reduction of +11.53 mg/dL and High IR mean reduction of -5.37 mg/dL, and (4) Demonstrates understanding that this represents the magnitude of difference between conditions.
+
+      [B] (10 points): Completes most sub-steps but has errors in: (1) Uses incorrect formula (e.g., Protein - Fiber instead of Fiber - Protein), (2) Fails to calculate reduction per subject before aggregating, (3) Misinterprets direction or meaning of positive/negative values, OR (4) Correctly calculates but fails to interpret the magnitude appropriately.
+
+      [C] (0 points): Fails critical sub-steps: Does not calculate peak glucose reduction correctly, uses completely wrong methodology, or does not address the comparison between protein and fiber conditions.
+
+  Criterion 4: Interaction Effect Analysis and Statistical Testing (25 points)
+    Description: Evaluates the correct implementation of two-way ANOVA with interaction term to test for moderation by IR status.
+    
+    Levels:
+      [A] (25 points): Completes all sub-steps correctly: (1) Uses two-way ANOVA with interaction term (condition * IR_status), (2) Tests interaction effect specifically, (3) Reports F-statistic (~0.2840) and p-value (~0.5976) correctly, (4) Correctly interprets as not statistically significant, (5) Calculates interaction effect as difference of differences (-16.90 mg/dL), and (6) Demonstrates understanding that this tests whether condition effect differs by IR status.
+
+      [B] (12 points): Completes most sub-steps but has errors in: (1) Uses incorrect model (separate analyses instead of two-way ANOVA, missing interaction term), (2) Fails to test interaction term specifically, (3) Incorrectly calculates or interprets interaction effect (difference of differences), OR (4) Describes method correctly but statistical implementation or interpretation has errors.
+
+      [C] (0 points): Fails critical sub-steps: Does not perform interaction analysis, uses completely wrong statistical method (e.g., correlation, univariate tests), or does not address the interaction between condition and IR status.
+
+  Criterion 5: Interaction Effect Size Calculation and Interpretation (10 points)
+    Description: Evaluates the correct calculation and interpretation of interaction effect size (partial eta-squared) and clinical significance.
+    
+    Levels:
+      [A] (10 points): Completes all sub-steps correctly: (1) Calculates partial eta-squared correctly (η²p = 0.0083), (2) Correctly interprets as negligible effect size, (3) Optionally calculates Cohen's f (0.0914), (4) Correctly interprets clinical pattern (Low IR benefits more: 11.53 mg/dL vs High IR: -5.37 mg/dL), (5) Reports interaction magnitude (-16.90 mg/dL), and (6) Acknowledges non-significance while noting potential clinical relevance and limitations.
+
+      [B] (5 points): Completes most sub-steps but has errors in: (1) Uses incorrect formula for partial eta-squared, (2) Fails to interpret effect size magnitude appropriately (doesn't categorize as negligible/small/medium/large), (3) Misinterprets clinical or biological significance, OR (4) Correctly calculates but provides incomplete interpretation.
+
+      [C] (0 points): Fails critical sub-steps: Does not calculate interaction effect size, uses completely wrong metric, or does not provide meaningful interpretation of the results.
