@@ -62,8 +62,11 @@ MAX_SASA = {
     'LEU': 201.0, 'LYS': 236.0, 'MET': 224.0, 'PHE': 240.0, 'PRO': 159.0, 
     'SER': 155.0, 'THR': 172.0, 'TRP': 285.0, 'TYR': 263.0, 'VAL': 174.0,
 }
-CB_DISTANCE_RANGE = (5.5, 8.0)
-CB_OPTIMAL_DISTANCE = 6.5
+MOTIF_PARAMS = {
+    "HH": {"types": ["H", "H"], "range": (5.5, 8.5), "optimal": 6.5},
+    "HK": {"types": ["H", "K"], "range": (6.0, 10.0), "optimal": 7.5},
+    "HR": {"types": ["H", "R"], "range": (6.0, 10.0), "optimal": 8.0},
+}
 
 def parse_structure(pdb_path: str):
     """Parse PDB and map to 0-indexed sequence."""
@@ -102,8 +105,8 @@ def identify_core_residues(pdb_path: str, threshold: float = 0.25) -> dict:
         "sequence": sequence, "pdb_path": pdb_path, "chain_id": chain.get_id()
     }
 
-def find_best_network_positions(parsed_data: dict, distance_range=CB_DISTANCE_RANGE, optimal=CB_OPTIMAL_DISTANCE) -> dict:
-    """Find optimal core position pairs for His networks."""
+def find_best_network_positions(parsed_data: dict) -> dict:
+    """Find optimal core position pairs for His networks (HH, HK, HR)."""
     structure, _, _, residues, _ = parse_structure(parsed_data["pdb_path"])
     
     # Get Cb coords (or Ca for Gly)
@@ -114,51 +117,68 @@ def find_best_network_positions(parsed_data: dict, distance_range=CB_DISTANCE_RA
     coords = np.array([get_coord(residues[i]) for i in core_indices])
     
     if len(coords) < 2:
-        return {"network_selection": [], "cb_distance": None, "geometric_score": None}
+        return {"network_selection": [], "cb_distance": None, "geometric_score": None, "motif_type": None}
 
     # Vectorized distance matrix
     diff = coords[:, None, :] - coords[None, :, :]
     dists = np.sqrt(np.sum(diff**2, axis=-1))
     
-    # Filter and score pairs
-    mask = (dists >= distance_range[0]) & (dists <= distance_range[1])
-    pairs = np.argwhere(np.triu(mask, k=1))
-    
     candidates = []
-    min_d, max_d = distance_range
-    for i1, i2 in pairs:
-        d = dists[i1, i2]
-        score = 1.0 - abs(d - optimal) / (max_d - min_d)
-        candidates.append({
-            "positions": [core_indices[i1], core_indices[i2]],
-            "cb_distance": float(d), "geometric_score": float(max(0, score))
-        })
+    
+    # Check each motif type
+    for m_name, m_params in MOTIF_PARAMS.items():
+        min_d, max_d = m_params["range"]
+        optimal = m_params["optimal"]
+        
+        mask = (dists >= min_d) & (dists <= max_d)
+        pairs = np.argwhere(np.triu(mask, k=1))
+        
+        for i1, i2 in pairs:
+            d = dists[i1, i2]
+            # Basic geometric score based on distance
+            score = 1.0 - abs(d - optimal) / (max_d - min_d)
+            
+            candidates.append({
+                "positions": [core_indices[i1], core_indices[i2]],
+                "cb_distance": float(d),
+                "geometric_score": float(max(0, score)),
+                "motif_type": m_name
+            })
     
     candidates.sort(key=lambda x: x["geometric_score"], reverse=True)
     best = candidates[0] if candidates else None
     
     if best:
-        print(f"[Module 2] Best pair: {best['positions']} (d={best['cb_distance']:.2f})")
+        print(f"[Module 2] Best pair: {best['positions']} ({best['motif_type']}, d={best['cb_distance']:.2f})")
         
     return {
         "network_selection": best["positions"] if best else [],
         "cb_distance": best["cb_distance"] if best else None,
         "geometric_score": best["geometric_score"] if best else None,
+        "motif_type": best["motif_type"] if best else None,
         "all_candidate_pairs": candidates
     }
 
-def design_around_network(client, pdb_path, sequence, network_indices, pdb_map, chain_id, num_seqs=20):
+def design_around_network(client, pdb_path, sequence, network_indices, pdb_map, chain_id, num_seqs=20, motif_type="HH"):
     """Run ProteinMPNN design."""
+    # Determine residues
+    target_res = MOTIF_PARAMS.get(motif_type, MOTIF_PARAMS["HH"])["types"]
+    if len(target_res) != len(network_indices):
+        target_res = ["H"] * len(network_indices)
+
     # Mutate sequence
     seq_list = list(sequence)
-    for i in network_indices: seq_list[i] = 'H'
+    for idx, res_type in zip(network_indices, target_res):
+        seq_list[idx] = res_type
     mutated_seq = "".join(seq_list)
     
     # Setup Tamarind job
     if client:
         print(f"[Module 3] Submitting ProteinMPNN job...")
         client.upload_file(pdb_path)
-        bias = {f"{chain_id}{pdb_map[i]}": {"H": 100.0} for i in network_indices}
+        bias = {}
+        for idx, res_type in zip(network_indices, target_res):
+            bias[f"{chain_id}{pdb_map[idx]}"] = {res_type: 100.0}
         
         try:
             job = client.submit_job_sync("proteinmpnn", {
@@ -170,7 +190,12 @@ def design_around_network(client, pdb_path, sequence, network_indices, pdb_map, 
             designs = []
             for f in list(results.rglob("*.fa*")):
                 for rec in SeqIO.parse(f, "fasta"):
-                    if all(rec.seq[i] == 'H' for i in network_indices):
+                    match = True
+                    for idx, expected in zip(network_indices, target_res):
+                        if rec.seq[idx] != expected:
+                            match = False
+                            break
+                    if match:
                         designs.append({"header": rec.id, "sequence": str(rec.seq)})
             return designs, mutated_seq
             
@@ -181,7 +206,7 @@ def design_around_network(client, pdb_path, sequence, network_indices, pdb_map, 
     print("[Module 3] Using mock sequences")
     return [{
         "header": f"mock_{i}",
-        "sequence": "".join('H' if j in network_indices else (
+        "sequence": "".join(target_res[network_indices.index(j)] if j in network_indices else (
             np.random.choice(list("ACDEFGHIKLMNPQRSTVWY")) 
             if np.random.rand() < 0.1 else s
         ) for j, s in enumerate(mutated_seq))
@@ -249,7 +274,8 @@ def run_pipeline(pdb_path: str, output_dir: str, **kwargs):
     designs, mut_seq = design_around_network(
         client, pdb_path, m1["sequence"], 
         m2["network_selection"], m1["pdb_index_map"], m1["chain_id"],
-        kwargs.get('num_designs', 2)
+        kwargs.get('num_designs', 2),
+        motif_type=m2.get("motif_type", "HH")
     )
     
     m3 = {
