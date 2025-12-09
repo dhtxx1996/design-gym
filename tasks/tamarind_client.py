@@ -20,16 +20,18 @@ from dotenv import load_dotenv
 
 
 class TamarindClient:
-    """Client for the Tamarind Bio API."""
+    """Client for the Tamarind Bio API with session-scoped job tracking."""
     
     BASE_URL = "https://app.tamarind.bio/api/"
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, session_id: Optional[str] = None):
         """
         Initialize the Tamarind client.
         
         Args:
             api_key: Tamarind API key. If not provided, loads from TAMARIND_API_KEY env var.
+            session_id: Unique identifier for this workflow session. Used to track which
+                       jobs were submitted by this agent run vs. external sources.
         """
         # Load .env from current directory or tasks directory
         load_dotenv()
@@ -44,6 +46,82 @@ class TamarindClient:
         
         self._headers = {"x-api-key": self.api_key}
         self._tools_cache: Optional[list] = None
+        
+        # Session-scoped job tracking
+        self.session_id = session_id or datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        self._session_jobs: dict[str, dict] = {}  # job_name -> job_info
+        self._session_files: dict[str, dict] = {}  # filename -> upload_info
+        self._session_start = datetime.now()
+        
+        # Retry configuration for transient errors
+        self.max_retries = 3
+        self.retry_delay = 2  # seconds, will use exponential backoff
+        
+    def get_session_jobs(self) -> dict[str, dict]:
+        """Get all jobs submitted in this session."""
+        return dict(self._session_jobs)
+    
+    def is_session_job(self, job_name: str) -> bool:
+        """Check if a job was submitted in this session."""
+        return job_name in self._session_jobs
+    
+    def get_session_files(self) -> dict[str, dict]:
+        """Get all files uploaded in this session."""
+        return dict(self._session_files)
+    
+    def is_session_file(self, filename: str) -> bool:
+        """Check if a file was uploaded in this session."""
+        return filename in self._session_files
+    
+    def get_session_summary(self) -> dict:
+        """Get summary of session activity for logging."""
+        return {
+            "session_id": self.session_id,
+            "session_start": self._session_start.isoformat(),
+            "jobs_submitted": list(self._session_jobs.keys()),
+            "job_count": len(self._session_jobs),
+            "files_uploaded": list(self._session_files.keys()),
+            "file_count": len(self._session_files),
+        }
+    
+    def _request_with_retry(
+        self, 
+        method: str, 
+        endpoint: str, 
+        params: Optional[dict] = None,
+        json_data: Optional[dict] = None,
+        files: Optional[dict] = None,
+        retries: Optional[int] = None
+    ) -> requests.Response:
+        """Make a request with retry logic for transient 500 errors."""
+        max_attempts = (retries or self.max_retries) + 1
+        last_error = None
+        
+        for attempt in range(max_attempts):
+            try:
+                response = self._request(method, endpoint, params, json_data, files)
+                
+                # Retry on 500/502/503/504 errors (transient server issues)
+                if response.status_code in (500, 502, 503, 504):
+                    if attempt < max_attempts - 1:
+                        delay = self.retry_delay * (2 ** attempt)  # Exponential backoff
+                        print(f"[tamarind] Server error {response.status_code}, retrying in {delay}s (attempt {attempt + 1}/{max_attempts})")
+                        time.sleep(delay)
+                        continue
+                
+                return response
+                
+            except requests.exceptions.RequestException as e:
+                last_error = e
+                if attempt < max_attempts - 1:
+                    delay = self.retry_delay * (2 ** attempt)
+                    print(f"[tamarind] Request failed: {e}, retrying in {delay}s (attempt {attempt + 1}/{max_attempts})")
+                    time.sleep(delay)
+                    continue
+                raise
+        
+        # If we get here, return the last response (even if error)
+        return response
     
     def _request(
         self, 
@@ -51,7 +129,8 @@ class TamarindClient:
         endpoint: str, 
         params: Optional[dict] = None,
         json_data: Optional[dict] = None,
-        files: Optional[dict] = None
+        files: Optional[dict] = None,
+        raise_on_error: bool = False
     ) -> requests.Response:
         """Make an authenticated request to the API."""
         url = f"{self.BASE_URL}{endpoint}"
@@ -63,6 +142,27 @@ class TamarindClient:
             json=json_data,
             files=files
         )
+        
+        # Enhanced error handling for common issues
+        if response.status_code == 400 and endpoint == "submit-job":
+            # Try to extract helpful error info
+            error_detail = response.text[:500] if response.text else "No details"
+            tool_name = json_data.get("type", "unknown") if json_data else "unknown"
+            settings = json_data.get("settings", {}) if json_data else {}
+            
+            # Check for common issues
+            hints = []
+            for key, value in settings.items():
+                if isinstance(value, str) and value.startswith("{") and value.endswith("}"):
+                    hints.append(f"  - '{key}' looks like stringified JSON. Try passing as dict instead.")
+            
+            error_msg = f"400 Bad Request for {tool_name}.\n"
+            error_msg += f"Server response: {error_detail}\n"
+            if hints:
+                error_msg += "Possible issues:\n" + "\n".join(hints)
+            
+            raise requests.HTTPError(error_msg, response=response)
+        
         return response
     
     # =========================================================================
@@ -129,6 +229,56 @@ class TamarindClient:
     # Job Submission
     # =========================================================================
     
+    def _normalize_settings(self, tool: str, settings: dict, warn_unuploaded: bool = True) -> dict:
+        """
+        Normalize settings to handle common agent mistakes.
+        
+        - Converts stringified JSON to actual objects for dict-like parameters
+        - Validates parameter names against tool spec
+        - Warns about file references that weren't uploaded in this session
+        """
+        normalized = dict(settings)
+        
+        # Get tool spec for validation
+        spec = self.get_tool_spec(tool)
+        if not spec:
+            return normalized
+        
+        spec_settings = {s.get("name"): s for s in spec.get("settings", [])}
+        
+        # Parameters that should be objects but are often passed as strings
+        dict_like_params = [
+            "omit_AA_per_residue", "bias_AA_per_residue", 
+            "fixed_positions", "tied_positions"
+        ]
+        
+        # Parameters that are file references
+        file_params = ["pdbFile", "templateFile", "templateFiles", "sdfFile", "inputFile"]
+        
+        for key, value in list(normalized.items()):
+            # Try to parse stringified JSON for dict-like parameters
+            if key in dict_like_params and isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    if isinstance(parsed, dict):
+                        normalized[key] = parsed
+                        print(f"[tamarind] Auto-converted {key} from string to dict")
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            
+            # Validate file references
+            if warn_unuploaded and key in file_params and isinstance(value, str) and value:
+                is_valid, message = self.validate_file_reference(value)
+                if not is_valid:
+                    print(f"[tamarind] ⚠️ Warning: {message}")
+                    print(f"[tamarind] The job may fail if the file doesn't exist on Tamarind.")
+            
+            # Warn about unknown parameters
+            if key not in spec_settings:
+                print(f"[tamarind] Warning: Unknown parameter '{key}' for tool '{tool}'")
+        
+        return normalized
+    
     def submit_job_async(
         self, 
         tool: str, 
@@ -152,10 +302,13 @@ class TamarindClient:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             job_name = f"{tool}_{timestamp}"
         
+        # Normalize settings to fix common mistakes
+        normalized_settings = self._normalize_settings(tool, settings)
+        
         params = {
             "jobName": job_name,
             "type": tool,
-            "settings": settings
+            "settings": normalized_settings
         }
         if job_email:
             params["jobEmail"] = job_email
@@ -170,13 +323,19 @@ class TamarindClient:
         except (json.JSONDecodeError, ValueError):
             response_data = response_text
         
-        return {
+        job_info = {
             "job_name": job_name,
             "tool": tool,
             "settings": settings,
             "response": response_data,
-            "submitted_at": datetime.now().isoformat()
+            "submitted_at": datetime.now().isoformat(),
+            "session_id": self.session_id,
         }
+        
+        # Track this job in the session
+        self._session_jobs[job_name] = job_info
+        
+        return job_info
     
     def submit_job_sync(
         self, 
@@ -184,7 +343,8 @@ class TamarindClient:
         settings: dict, 
         job_name: Optional[str] = None,
         timeout: int = 600,
-        poll_interval: int = 10
+        poll_interval: int = 10,
+        skip_status_polling: bool = True
     ) -> dict:
         """
         Submit a job and wait for completion.
@@ -195,19 +355,131 @@ class TamarindClient:
             job_name: Optional custom job name
             timeout: Max seconds to wait for completion
             poll_interval: Seconds between status checks
+            skip_status_polling: If True, skip polling /jobs endpoint and directly try to 
+                               get results (useful when /jobs returns 500 errors)
             
         Returns:
             Dict with job info and final status.
             
         Raises:
             TimeoutError: If job doesn't complete within timeout.
+            Exception: With clear indication of which step failed.
         """
-        job_info = self.submit_job_async(tool, settings, job_name)
-        actual_job_name = job_info["job_name"]
+        # Step 1: Submit the job
+        try:
+            job_info = self.submit_job_async(tool, settings, job_name)
+            actual_job_name = job_info["job_name"]
+            print(f"[tamarind] Job submitted: {actual_job_name}")
+        except Exception as e:
+            raise Exception(f"Job submission failed (POST /submit-job): {e}")
         
-        result = self.wait_for_job(actual_job_name, timeout, poll_interval)
-        job_info["final_status"] = result
-        return job_info
+        if skip_status_polling:
+            # Skip polling /jobs endpoint, directly try to get results with retries
+            try:
+                result = self._wait_for_results_directly(actual_job_name, timeout, poll_interval)
+                job_info["final_status"] = result
+                return job_info
+            except Exception as e:
+                job_info["status_error"] = str(e)
+                job_info["note"] = (
+                    f"Job '{actual_job_name}' was submitted but result retrieval failed. "
+                    f"The job may still be running. Check https://app.tamarind.bio"
+                )
+                print(f"[tamarind] ⚠️ {job_info['note']}")
+                raise Exception(
+                    f"Job '{actual_job_name}' submitted OK, but result retrieval failed: {e}\n"
+                    f"The job may still be running on Tamarind."
+                )
+        else:
+            # Step 2: Wait for completion (polls GET /jobs)
+            try:
+                result = self.wait_for_job(actual_job_name, timeout, poll_interval)
+                job_info["final_status"] = result
+                return job_info
+            except Exception as e:
+                # Job was submitted but status polling failed
+                # Return partial info so results might still be downloadable
+                job_info["status_error"] = str(e)
+                job_info["note"] = (
+                    f"Job '{actual_job_name}' was submitted successfully but status polling failed. "
+                    f"The job may still complete on Tamarind. Check the web UI or try downloading results later."
+                )
+                print(f"[tamarind] ⚠️ {job_info['note']}")
+                raise Exception(
+                    f"Job '{actual_job_name}' submitted OK, but status polling failed (GET /jobs): {e}\n"
+                    f"The job may still be running on Tamarind. You can check status at https://app.tamarind.bio"
+                )
+    
+    def _wait_for_results_directly(
+        self,
+        job_name: str,
+        timeout: int = 600,
+        poll_interval: int = 15
+    ) -> dict:
+        """
+        Wait for job results by directly trying to fetch them, skipping status polling.
+        
+        This is useful when the /jobs status endpoint is returning errors but the job
+        may still be completing successfully.
+        
+        Args:
+            job_name: Name of the job
+            timeout: Max seconds to wait
+            poll_interval: Seconds between result fetch attempts
+            
+        Returns:
+            Dict with result info when successful
+            
+        Raises:
+            TimeoutError: If results not available within timeout
+        """
+        start_time = time.time()
+        attempt = 0
+        
+        # Initial wait before first attempt (give job time to start)
+        initial_wait = min(30, poll_interval * 2)
+        print(f"[tamarind] Skipping status polling, waiting {initial_wait}s before checking results...")
+        time.sleep(initial_wait)
+        
+        while time.time() - start_time < timeout:
+            attempt += 1
+            elapsed = int(time.time() - start_time)
+            
+            try:
+                # Try to get the result URL
+                params = {"jobName": job_name}
+                response = self._request("POST", "result", json_data=params)
+                
+                if response.status_code == 200:
+                    # Results are ready!
+                    download_url = response.text.replace('"', '')
+                    print(f"[tamarind] Job '{job_name}' completed! Results available.")
+                    return {
+                        "status": "completed",
+                        "job_name": job_name,
+                        "download_url": download_url,
+                        "elapsed_seconds": elapsed
+                    }
+                elif response.status_code == 404:
+                    # Job not found or not ready yet
+                    print(f"[tamarind] Results not ready yet (attempt {attempt}, {elapsed}s elapsed). Waiting...")
+                elif response.status_code in (400, 500, 502, 503, 504):
+                    # Server error or bad request - job may still be running
+                    print(f"[tamarind] Result check returned {response.status_code} (attempt {attempt}, {elapsed}s elapsed). Waiting...")
+                else:
+                    print(f"[tamarind] Unexpected status {response.status_code} (attempt {attempt}). Waiting...")
+                    
+            except requests.exceptions.RequestException as e:
+                print(f"[tamarind] Request error (attempt {attempt}): {e}. Waiting...")
+            except Exception as e:
+                print(f"[tamarind] Error checking results (attempt {attempt}): {e}. Waiting...")
+            
+            time.sleep(poll_interval)
+        
+        raise TimeoutError(
+            f"Job '{job_name}' results not available within {timeout} seconds. "
+            f"The job may still be running. Check https://app.tamarind.bio"
+        )
     
     def submit_batch(self, jobs: list[dict]) -> list[dict]:
         """
@@ -227,14 +499,19 @@ class TamarindClient:
     # Job Management
     # =========================================================================
     
-    def get_jobs(self) -> list[dict]:
+    def get_jobs(self, job_name: Optional[str] = None) -> list[dict]:
         """
-        Get list of all jobs in your account.
+        Get list of jobs in your account.
+        
+        Args:
+            job_name: Optional job name to filter by (much more efficient than fetching all)
         
         Returns:
             List of job info dicts.
         """
-        response = self._request("GET", "jobs")
+        # Use retry logic for job listing (often has transient 500 errors)
+        params = {"jobName": job_name} if job_name else None
+        response = self._request_with_retry("GET", "jobs", params=params)
         response.raise_for_status()
         data = response.json()
         # API returns {"jobs": [...], "startKey": ..., "statuses": ...}
@@ -252,7 +529,8 @@ class TamarindClient:
         Returns:
             Job status dict or None if not found.
         """
-        jobs = self.get_jobs()
+        # Query directly with jobName parameter - much more efficient!
+        jobs = self.get_jobs(job_name=job_name)
         for job in jobs:
             name = job.get("JobName") or job.get("jobName") or job.get("name")
             if name == job_name:
@@ -281,25 +559,54 @@ class TamarindClient:
             ValueError: If job not found.
         """
         start_time = time.time()
+        consecutive_errors = 0
+        max_consecutive_errors = 5
         
         while time.time() - start_time < timeout:
-            status = self.get_job_status(job_name)
-            
-            if status is None:
-                # Job might not appear immediately after submission
+            try:
+                status = self.get_job_status(job_name)
+                consecutive_errors = 0  # Reset on success
+                
+                if status is None:
+                    # Job might not appear immediately after submission
+                    print(f"[tamarind] Job '{job_name}' not yet visible, waiting...")
+                    time.sleep(poll_interval)
+                    continue
+                
+                # Handle both capitalized (API) and lowercase field names
+                job_status = (status.get("JobStatus") or status.get("status") or "").lower()
+                
+                if job_status in ("complete", "completed", "done", "finished", "success"):
+                    print(f"[tamarind] Job '{job_name}' completed successfully!")
+                    return status
+                elif job_status in ("failed", "error", "cancelled"):
+                    print(f"[tamarind] Job '{job_name}' ended with status: {job_status}")
+                    return status
+                
+                print(f"[tamarind] Job '{job_name}' status: {job_status}. Waiting...")
                 time.sleep(poll_interval)
-                continue
-            
-            # Handle both capitalized (API) and lowercase field names
-            job_status = (status.get("JobStatus") or status.get("status") or "").lower()
-            
-            if job_status in ("complete", "completed", "done", "finished", "success"):
-                return status
-            elif job_status in ("failed", "error", "cancelled"):
-                return status
-            
-            print(f"Job '{job_name}' status: {job_status}. Waiting...")
-            time.sleep(poll_interval)
+                
+            except requests.exceptions.HTTPError as e:
+                consecutive_errors += 1
+                if consecutive_errors >= max_consecutive_errors:
+                    raise Exception(
+                        f"Status polling failed {consecutive_errors} times consecutively. "
+                        f"Last error: {e}"
+                    )
+                # Increase wait time on errors
+                wait_time = poll_interval * (1 + consecutive_errors)
+                print(f"[tamarind] Status check error ({consecutive_errors}/{max_consecutive_errors}), "
+                      f"retrying in {wait_time}s: {e}")
+                time.sleep(wait_time)
+                
+            except Exception as e:
+                consecutive_errors += 1
+                if consecutive_errors >= max_consecutive_errors:
+                    raise
+                wait_time = poll_interval * (1 + consecutive_errors)
+                print(f"[tamarind] Unexpected error ({consecutive_errors}/{max_consecutive_errors}), "
+                      f"retrying in {wait_time}s: {e}")
+                time.sleep(wait_time)
         
         raise TimeoutError(f"Job '{job_name}' did not complete within {timeout} seconds")
     
@@ -325,7 +632,8 @@ class TamarindClient:
         self, 
         job_name: str, 
         output_dir: str = "./tmp",
-        extract: bool = True
+        extract: bool = True,
+        require_session_job: bool = True
     ) -> Path:
         """
         Download job results to local directory.
@@ -334,10 +642,23 @@ class TamarindClient:
             job_name: Name of the job
             output_dir: Directory to save results (created if doesn't exist)
             extract: If True, extract zip contents
+            require_session_job: If True, only allow downloading jobs submitted in this session.
+                               This prevents contamination from external job results.
             
         Returns:
             Path to downloaded file or extracted directory.
+            
+        Raises:
+            ValueError: If require_session_job=True and job was not submitted in this session.
         """
+        # Validate job belongs to this session
+        if require_session_job and not self.is_session_job(job_name):
+            raise ValueError(
+                f"Job '{job_name}' was not submitted in this session (session_id={self.session_id}). "
+                f"Only jobs submitted by this agent run can be downloaded. "
+                f"Session jobs: {list(self._session_jobs.keys())}"
+            )
+        
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
         
@@ -366,6 +687,18 @@ class TamarindClient:
             
             # Remove zip after extraction
             zip_path.unlink()
+            
+            # Save session metadata alongside results
+            session_meta_path = extract_path / "_session_info.json"
+            session_meta = {
+                "session_id": self.session_id,
+                "job_name": job_name,
+                "downloaded_at": datetime.now().isoformat(),
+                "job_info": self._session_jobs.get(job_name, {}),
+            }
+            with open(session_meta_path, "w") as f:
+                json.dump(session_meta, f, indent=2, default=str)
+            
             return extract_path
         
         return zip_path
@@ -382,7 +715,7 @@ class TamarindClient:
             filepath: Path to local file to upload
             
         Returns:
-            Upload response with file info.
+            Upload response with file info including session tracking.
         """
         filepath = Path(filepath)
         if not filepath.exists():
@@ -398,7 +731,69 @@ class TamarindClient:
             )
         
         response.raise_for_status()
-        return {"filename": filename, "response": response.text}
+        
+        # Track uploaded file in session
+        upload_info = {
+            "filename": filename,
+            "local_path": str(filepath),
+            "uploaded_at": datetime.now().isoformat(),
+            "session_id": self.session_id,
+            "response": response.text,
+        }
+        self._session_files[filename] = upload_info
+        
+        return upload_info
+    
+    def get_uploaded_filename(self, filepath: str) -> Optional[str]:
+        """
+        Get the Tamarind filename for a local file path.
+        Returns None if file wasn't uploaded in this session.
+        """
+        filepath = Path(filepath)
+        filename = filepath.name
+        
+        if filename in self._session_files:
+            return filename
+        
+        # Check by local path
+        for fname, info in self._session_files.items():
+            if info.get("local_path") == str(filepath):
+                return fname
+        
+        return None
+    
+    def validate_file_reference(self, file_ref: str) -> tuple[bool, str]:
+        """
+        Validate a file reference for use in job submission.
+        
+        Args:
+            file_ref: File reference (filename or path)
+            
+        Returns:
+            Tuple of (is_valid, message)
+        """
+        filename = Path(file_ref).name
+        
+        if self.is_session_file(filename):
+            return True, f"File '{filename}' was uploaded in this session."
+        
+        # Check if it looks like a job output path (JobName/path/file.ext)
+        if "/" in file_ref and not file_ref.startswith("/"):
+            parts = file_ref.split("/")
+            job_name = parts[0]
+            if self.is_session_job(job_name):
+                return True, f"File references output from session job '{job_name}'."
+            else:
+                return False, (
+                    f"File '{file_ref}' references job '{job_name}' which was not submitted in this session. "
+                    f"Session jobs: {list(self._session_jobs.keys())}"
+                )
+        
+        return False, (
+            f"File '{filename}' was not uploaded in this session. "
+            f"Please upload it first with upload_file(). "
+            f"Session files: {list(self._session_files.keys())}"
+        )
     
     def list_files(self) -> list[dict]:
         """
