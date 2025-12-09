@@ -14,6 +14,7 @@ Usage:
 import os
 import sys
 import json
+import shutil
 import argparse
 import traceback
 from pathlib import Path
@@ -155,7 +156,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "tamarind_submit_job",
-            "description": "Submit a job to Tamarind Bio and wait for results. Pass all parameters inside the 'params' dict.",
+            "description": "Submit a job to Tamarind Bio and wait for results. Pass all parameters inside the 'params' dict. If the job takes too long, it returns a 'pending' status with the job_name - use tamarind_poll_results to check later.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -169,6 +170,23 @@ TOOLS = [
                     }
                 },
                 "required": ["tool_name", "params"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "tamarind_poll_results",
+            "description": "Poll for results of a previously submitted Tamarind job. Use this when tamarind_submit_job returned a 'pending' status. Can be called multiple times until job completes.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "job_name": {
+                        "type": "string",
+                        "description": "The job_name returned from tamarind_submit_job"
+                    }
+                },
+                "required": ["job_name"]
             }
         }
     },
@@ -384,6 +402,23 @@ class AgentTools:
         try:
             result = self.tamarind.submit_job_sync(tool_name, params, timeout=600)
             
+            # Check if job is still pending (didn't complete within timeout)
+            final_status = result.get("final_status", {})
+            if final_status.get("status") == "pending":
+                # Job is still running - return info for async polling
+                return json.dumps({
+                    "status": "pending",
+                    "job_name": result.get("job_name"),
+                    "message": (
+                        f"Job '{result.get('job_name')}' was submitted but is still running. "
+                        f"Use tamarind_poll_results with job_name='{result.get('job_name')}' to check for results later. "
+                        f"You can continue with other work in the meantime."
+                    ),
+                    "tool": tool_name,
+                    "submitted_at": result.get("submitted_at"),
+                }, indent=2, default=str)
+            
+            # Job completed - try to download results
             if "job_name" in result:
                 try:
                     download_path = self.tamarind.download_results(
@@ -419,6 +454,45 @@ class AgentTools:
             else:
                 return f"Error: {error_msg}"
     
+    def tamarind_poll_results(self, job_name: str) -> str:
+        """Poll for results of a previously submitted job."""
+        try:
+            result = self.tamarind.poll_job_results(job_name, timeout=120, poll_interval=10)
+            
+            if result.get("status") == "completed":
+                # Job completed - try to download results
+                try:
+                    download_path = self.tamarind.download_results(
+                        job_name, 
+                        output_dir=str(self.output_dir / "tamarind_results")
+                    )
+                    result["downloaded_to"] = str(download_path)
+                    result["message"] = f"Job completed! Results downloaded to {download_path}"
+                except Exception as download_error:
+                    result["download_error"] = str(download_error)
+                    result["note"] = "Job completed but result download failed. Results may be available on Tamarind web UI."
+                
+                return json.dumps(result, indent=2, default=str)
+            
+            elif result.get("status") == "pending":
+                # Still running
+                return json.dumps({
+                    "status": "pending",
+                    "job_name": job_name,
+                    "message": (
+                        f"Job '{job_name}' is still running. "
+                        f"Try again later with tamarind_poll_results, or continue with other work."
+                    ),
+                    "elapsed_seconds": result.get("elapsed_seconds"),
+                }, indent=2, default=str)
+            
+            else:
+                # Failed or other status
+                return json.dumps(result, indent=2, default=str)
+                
+        except Exception as e:
+            return f"Error polling results: {e}"
+    
     def execute_tool(self, tool_name: str, arguments: dict) -> str:
         handlers = {
             "read_file": lambda: self.read_file(arguments["path"]),
@@ -429,6 +503,7 @@ class AgentTools:
             "tamarind_get_tool_spec": lambda: self.tamarind_get_tool_spec(arguments["tool_name"]),
             "tamarind_upload_file": lambda: self.tamarind_upload_file(arguments["filepath"]),
             "tamarind_submit_job": lambda: self._handle_tamarind_submit(arguments),
+            "tamarind_poll_results": lambda: self.tamarind_poll_results(arguments["job_name"]),
             "task_complete": lambda: f"TASK_COMPLETE: {arguments['summary']}",
         }
         return handlers.get(tool_name, lambda: f"Unknown tool: {tool_name}")()
@@ -447,7 +522,7 @@ class AgentTools:
 # Agent Loop
 # =============================================================================
 
-def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", output_name: str = None):
+def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", output_name: str = None, overwrite: bool = False, question_file: str = None):
     """Run the agent on a task."""
     tasks_dir = Path(__file__).parent
     task_dir = tasks_dir / task_name
@@ -461,11 +536,23 @@ def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", o
         print(f"Error: Task directory not found: {task_dir}")
         return
     
-    # Ensure clean output directory (no contamination from previous runs)
+    # Check for existing output directory
     if output_dir.exists():
-        print(f"Warning: Output directory already exists: {output_dir}")
-        print("  Results from previous runs may contaminate evaluation.")
-        print("  Consider using a fresh output name or clearing the directory.")
+        # Check if directory is not empty
+        has_contents = any(output_dir.iterdir())
+        
+        if has_contents:
+            if overwrite:
+                print(f"Overwriting existing output directory: {output_dir}")
+                shutil.rmtree(output_dir)
+            else:
+                print(f"Error: Output directory already exists and is not empty: {output_dir}")
+                print("  Results from previous runs would contaminate evaluation.")
+                print("  Options:")
+                print("    1. Use --overwrite to delete and replace the existing output")
+                print("    2. Use a different --output name")
+                print("    3. Manually delete the directory")
+                return
     
     print("=" * 60)
     print("AI Agent for Computational Biology")
@@ -480,12 +567,16 @@ def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", o
     client = OpenAI()
     tools = AgentTools(task_dir, output_dir, session_id)
     
-    # Load task description from question.md if it exists
-    question_path = task_dir / "question.md"
+    # Load task description from question file
+    question_path = Path(question_file) if question_file else task_dir / "question.md"
+    if not question_path.is_absolute():
+        question_path = task_dir / question_path
     if question_path.exists():
         task_description = question_path.read_text()
+        print(f"Question: {question_path.name}")
     else:
         task_description = "Complete the computational biology task in this directory. Explore the files to understand requirements."
+        print(f"Question: (default prompt)")
     
     # Task-agnostic system prompt
     system_prompt = f"""You are an expert computational biologist. Complete the task step by step using the available tools.
@@ -501,7 +592,8 @@ AVAILABLE TOOLS:
 - tamarind_list_tools: List available Tamarind Bio ML tools
 - tamarind_get_tool_spec: Get tool parameters (ALWAYS call before using a tool)
 - tamarind_upload_file: Upload files for Tamarind jobs
-- tamarind_submit_job: Submit jobs to Tamarind Bio
+- tamarind_submit_job: Submit jobs to Tamarind Bio (returns 'pending' if job takes too long)
+- tamarind_poll_results: Poll for results of a pending job (use job_name from submit)
 - task_complete: Call when done with a summary
 
 GENERAL WORKFLOW:
@@ -524,6 +616,16 @@ IMPORTANT - TAMARIND TOOL USAGE:
 - If a tool call fails with 400 error, check parameter types carefully
 - If a tool call fails with 500 error, it may be a transient server issue - the system will retry automatically
 - Common tools: esmfold (sequence to structure), proteinmpnn (structure to sequence)
+
+ASYNC JOB HANDLING (IMPORTANT):
+- tamarind_submit_job waits up to 10 minutes for results
+- If the job takes longer, it returns status="pending" with the job_name
+- When you get a "pending" response:
+  1. Note the job_name from the response
+  2. Continue with other work (analysis, file prep, etc.)
+  3. Later call tamarind_poll_results(job_name) to check if results are ready
+  4. If still pending, try again after doing more work
+- This allows you to be productive while long-running jobs execute
 
 FILE UPLOAD REQUIREMENTS:
 - Before using a file (pdbFile, templateFile, etc.) in a Tamarind job, you MUST upload it first
@@ -634,12 +736,14 @@ Be methodical, save intermediate results, and try alternatives if something fail
 def main():
     parser = argparse.ArgumentParser(description="Task-Agnostic AI Agent for Computational Biology")
     parser.add_argument("--task", required=True, help="Task directory name")
+    parser.add_argument("--question", help="Question file path (default: question.md)")
     parser.add_argument("--output", help="Output directory name (default: timestamp)")
-    parser.add_argument("--max-iterations", type=int, default=100, help="Maximum iterations (default: 20)")
+    parser.add_argument("--max-iterations", type=int, default=100, help="Maximum iterations (default: 100)")
     parser.add_argument("--model", default="gpt-4o", help="OpenAI model (default: gpt-4o)")
+    parser.add_argument("--overwrite", action="store_true", help="Delete and overwrite existing output directory")
     
     args = parser.parse_args()
-    run_agent(args.task, args.max_iterations, args.model, args.output)
+    run_agent(args.task, args.max_iterations, args.model, args.output, args.overwrite, args.question)
 
 
 if __name__ == "__main__":
