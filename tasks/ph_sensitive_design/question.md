@@ -4,7 +4,12 @@
 
 Engineer a pH-sensitive "switch" into a stable protein scaffold. The goal is to introduce a buried Histidine-mediated hydrogen bond network that is stable at neutral pH (7.4) but becomes destabilizing at acidic pH (~6.0), triggering a conformational change or unfolding.
 
-Using the provided scaffold `data/scaffold.pdb` (a de novo designed NTF2 fold, PDB ID 5L33), develop a computational workflow that:
+Use the de novo designed NTF2 fold **PDB ID 5L33** as your scaffold. Download it to your working directory:
+```python
+urllib.request.urlretrieve("https://files.rcsb.org/download/5L33.pdb", "scaffold.pdb")
+```
+
+Develop a computational workflow that:
 
 1. **Identifies buried core residues** suitable for installing pH-sensing networks
 2. **Discovers positions** where His-containing hydrogen bond networks can be installed
@@ -15,9 +20,11 @@ Using the provided scaffold `data/scaffold.pdb` (a de novo designed NTF2 fold, P
 
 A successful solution will:
 - Produce designed sequences containing buried His networks
-- Demonstrate high-confidence structure predictions (pLDDT > 70)
+- Demonstrate high-confidence structure predictions (pLDDT > 80)
 - Show geometric evidence that the His network is formed in predicted structures
-- Explain why the design would function as a pH sensor
+- **Explain conceptually why Histidine is chosen** for pH sensing (hint: consider its pKa ~6.0 relative to physiological/endosomal pH ranges)
+- **Explain why the His network must be buried** in the protein core (hint: consider pKa shifts in buried vs. surface environments)
+- **Discuss potential biological applications** of such pH-sensitive proteins (e.g., endosomal release for drug delivery, biosensors, pH-triggered conformational switches)
 
 ## Background
 
