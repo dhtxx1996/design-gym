@@ -247,17 +247,28 @@ class TamarindClient:
         spec_settings = {s.get("name"): s for s in spec.get("settings", [])}
         
         # Parameters that should be objects but are often passed as strings
+        # NOTE: bias_AA_per_residue and omit_AA_per_residue MUST remain as strings!
+        # The Tamarind API expects these as JSON strings, not dicts.
+        # Passing them as dicts causes jobs to fail with "Stopped" status.
         dict_like_params = [
-            "omit_AA_per_residue", "bias_AA_per_residue", 
             "fixed_positions", "tied_positions"
         ]
+        
+        # Parameters that MUST be JSON strings (API quirk)
+        must_be_string_params = ["bias_AA_per_residue", "omit_AA_per_residue"]
         
         # Parameters that are file references
         file_params = ["pdbFile", "templateFile", "templateFiles", "sdfFile", "inputFile"]
         
         for key, value in list(normalized.items()):
+            # Ensure parameters that must be strings ARE strings
+            # The Tamarind API expects certain params as JSON strings, not dicts
+            if key in must_be_string_params and isinstance(value, dict):
+                normalized[key] = json.dumps(value)
+                print(f"[tamarind] Converted {key} from dict to JSON string (API requirement)")
+            
             # Try to parse stringified JSON for dict-like parameters
-            if key in dict_like_params and isinstance(value, str):
+            elif key in dict_like_params and isinstance(value, str):
                 try:
                     parsed = json.loads(value)
                     if isinstance(parsed, dict):
@@ -278,6 +289,84 @@ class TamarindClient:
                 print(f"[tamarind] Warning: Unknown parameter '{key}' for tool '{tool}'")
         
         return normalized
+    
+    def _parse_job_status_from_400(self, error_detail: str) -> Optional[str]:
+        """
+        Parse job status from a 400 response.
+        
+        The Tamarind API returns 400 with messages like:
+        - "Job xyz is not complete. Status: In Queue"
+        - "Job xyz is not complete. Status: Running"
+        - "Job xyz is not complete. Status: Stopped"
+        
+        Returns the status string (e.g., "In Queue", "Running") or None if not found.
+        """
+        if not error_detail:
+            return None
+        
+        # Try to extract status after "Status:"
+        if "Status:" in error_detail:
+            try:
+                # Get everything after "Status:"
+                status_part = error_detail.split("Status:")[-1]
+                # Clean up: remove quotes, whitespace, trailing punctuation
+                status = status_part.strip().strip('"').strip("'").strip()
+                # Remove any trailing characters after the status word
+                if status:
+                    return status
+            except:
+                pass
+        
+        return None
+    
+    def _get_job_failure_details(self, job_name: str) -> dict:
+        """
+        Try to get detailed failure information for a failed job.
+        
+        Queries the /jobs endpoint to get any error messages, logs, or 
+        additional status information that can help diagnose failures.
+        """
+        details = {
+            "job_name": job_name,
+            "error_details": None,
+            "job_info": None,
+        }
+        
+        try:
+            # Query job status from /jobs endpoint
+            jobs = self.get_jobs(job_name=job_name)
+            for job in jobs:
+                name = job.get("JobName") or job.get("jobName") or job.get("name")
+                if name == job_name:
+                    details["job_info"] = job
+                    
+                    # Extract any error-related fields
+                    error_fields = ["Error", "error", "ErrorMessage", "errorMessage", 
+                                   "FailureReason", "failureReason", "Message", "message",
+                                   "StatusReason", "statusReason", "Logs", "logs"]
+                    for field in error_fields:
+                        if field in job and job[field]:
+                            if details["error_details"] is None:
+                                details["error_details"] = {}
+                            details["error_details"][field] = job[field]
+                    
+                    # Log what we found
+                    status = job.get("JobStatus") or job.get("status") or "unknown"
+                    print(f"[tamarind] Job details from /jobs API:")
+                    print(f"[tamarind]   Status: {status}")
+                    if details["error_details"]:
+                        for k, v in details["error_details"].items():
+                            print(f"[tamarind]   {k}: {v}")
+                    else:
+                        # Print all fields if no specific error found
+                        print(f"[tamarind]   Full job info: {json.dumps(job, indent=2, default=str)[:500]}")
+                    break
+                    
+        except Exception as e:
+            print(f"[tamarind] Could not fetch job details: {e}")
+            details["fetch_error"] = str(e)
+        
+        return details
     
     def submit_job_async(
         self, 
@@ -375,21 +464,21 @@ class TamarindClient:
         
         if skip_status_polling:
             # Skip polling /jobs endpoint, directly try to get results with retries
-            try:
-                result = self._wait_for_results_directly(actual_job_name, timeout, poll_interval)
-                job_info["final_status"] = result
-                return job_info
-            except Exception as e:
-                job_info["status_error"] = str(e)
+            # Note: We don't raise on timeout - instead return pending status for async polling
+            result = self._wait_for_results_directly(
+                actual_job_name, timeout, poll_interval, raise_on_timeout=False
+            )
+            job_info["final_status"] = result
+            
+            if result.get("status") == "pending":
+                # Job is still running - return info so agent can poll later
                 job_info["note"] = (
-                    f"Job '{actual_job_name}' was submitted but result retrieval failed. "
-                    f"The job may still be running. Check https://app.tamarind.bio"
+                    f"Job '{actual_job_name}' was submitted but is still running. "
+                    f"Use tamarind_poll_results with job_name='{actual_job_name}' to check for results later."
                 )
-                print(f"[tamarind] ⚠️ {job_info['note']}")
-                raise Exception(
-                    f"Job '{actual_job_name}' submitted OK, but result retrieval failed: {e}\n"
-                    f"The job may still be running on Tamarind."
-                )
+                print(f"[tamarind] ⏳ {job_info['note']}")
+            
+            return job_info
         else:
             # Step 2: Wait for completion (polls GET /jobs)
             try:
@@ -414,7 +503,8 @@ class TamarindClient:
         self,
         job_name: str,
         timeout: int = 600,
-        poll_interval: int = 15
+        poll_interval: int = 15,
+        raise_on_timeout: bool = False
     ) -> dict:
         """
         Wait for job results by directly trying to fetch them, skipping status polling.
@@ -426,12 +516,15 @@ class TamarindClient:
             job_name: Name of the job
             timeout: Max seconds to wait
             poll_interval: Seconds between result fetch attempts
+            raise_on_timeout: If True, raise TimeoutError on timeout. If False, return 
+                            a "pending" status that allows the agent to poll later.
             
         Returns:
-            Dict with result info when successful
+            Dict with result info. If completed: {"status": "completed", ...}
+            If timed out and raise_on_timeout=False: {"status": "pending", ...}
             
         Raises:
-            TimeoutError: If results not available within timeout
+            TimeoutError: If results not available within timeout AND raise_on_timeout=True
         """
         start_time = time.time()
         attempt = 0
@@ -463,8 +556,36 @@ class TamarindClient:
                 elif response.status_code == 404:
                     # Job not found or not ready yet
                     print(f"[tamarind] Results not ready yet (attempt {attempt}, {elapsed}s elapsed). Waiting...")
-                elif response.status_code in (400, 500, 502, 503, 504):
-                    # Server error or bad request - job may still be running
+                elif response.status_code == 400:
+                    # 400 can mean "job not complete" - parse status from response
+                    error_detail = response.text[:300] if response.text else "No details"
+                    
+                    # Extract job status from response (e.g., "Status: Running", "Status: In Queue")
+                    job_status = self._parse_job_status_from_400(error_detail)
+                    
+                    # Check if this is a terminal failure status
+                    if job_status and job_status.lower() in ["failed", "error", "cancelled", "canceled", "stopped"]:
+                        print(f"[tamarind] ❌ Job failed with status: {job_status}")
+                        
+                        # Try to get more details about why the job failed
+                        failure_details = self._get_job_failure_details(job_name)
+                        
+                        return {
+                            "status": "failed",
+                            "job_name": job_name,
+                            "error": f"Job failed with status: {job_status}",
+                            "elapsed_seconds": elapsed,
+                            "message": f"Job '{job_name}' failed with status: {job_status}. Response: {error_detail}",
+                            "failure_details": failure_details,
+                        }
+                    elif job_status:
+                        # Job is still running (In Queue, Running, etc.)
+                        print(f"[tamarind] Job status: {job_status} (attempt {attempt}, {elapsed}s elapsed). Waiting...")
+                    else:
+                        # Unknown 400 response - log and keep polling
+                        print(f"[tamarind] Result check returned 400 (attempt {attempt}): {error_detail}")
+                elif response.status_code in (500, 502, 503, 504):
+                    # Server error - job may still be running
                     print(f"[tamarind] Result check returned {response.status_code} (attempt {attempt}, {elapsed}s elapsed). Waiting...")
                 else:
                     print(f"[tamarind] Unexpected status {response.status_code} (attempt {attempt}). Waiting...")
@@ -476,10 +597,138 @@ class TamarindClient:
             
             time.sleep(poll_interval)
         
-        raise TimeoutError(
-            f"Job '{job_name}' results not available within {timeout} seconds. "
-            f"The job may still be running. Check https://app.tamarind.bio"
-        )
+        # Timeout reached
+        elapsed = int(time.time() - start_time)
+        if raise_on_timeout:
+            raise TimeoutError(
+                f"Job '{job_name}' results not available within {timeout} seconds. "
+                f"The job may still be running. Check https://app.tamarind.bio"
+            )
+        
+        # Return pending status instead of raising exception
+        print(f"[tamarind] ⏳ Job '{job_name}' still running after {elapsed}s. Use poll_job_results('{job_name}') to check later.")
+        return {
+            "status": "pending",
+            "job_name": job_name,
+            "elapsed_seconds": elapsed,
+            "message": (
+                f"Job '{job_name}' is still running after {elapsed}s. "
+                f"Use tamarind_poll_results tool with job_name='{job_name}' to check for results later."
+            )
+        }
+    
+    def poll_job_results(
+        self,
+        job_name: str,
+        timeout: int = 120,
+        poll_interval: int = 10
+    ) -> dict:
+        """
+        Poll for job results. Use this to check on a previously submitted job.
+        
+        This is useful when a job submission timed out during initial polling but
+        the job may have completed since then.
+        
+        Args:
+            job_name: Name of the job to poll
+            timeout: Max seconds to wait for results (default 120s for quick check)
+            poll_interval: Seconds between result fetch attempts
+            
+        Returns:
+            Dict with status. 
+            - If completed: {"status": "completed", "job_name": ..., "download_url": ...}
+            - If still pending: {"status": "pending", "job_name": ..., "message": ...}
+            - If failed: {"status": "failed", "job_name": ..., "error": ...}
+        """
+        print(f"[tamarind] Polling for results of job '{job_name}'...")
+        
+        start_time = time.time()
+        attempt = 0
+        last_error = None
+        
+        while time.time() - start_time < timeout:
+            attempt += 1
+            elapsed = int(time.time() - start_time)
+            
+            try:
+                # Try to get the result URL
+                params = {"jobName": job_name}
+                response = self._request("POST", "result", json_data=params)
+                
+                if response.status_code == 200:
+                    # Results are ready!
+                    download_url = response.text.replace('"', '')
+                    print(f"[tamarind] ✅ Job '{job_name}' completed! Results available.")
+                    return {
+                        "status": "completed",
+                        "job_name": job_name,
+                        "download_url": download_url,
+                        "elapsed_seconds": elapsed,
+                        "message": f"Job completed! Results ready for download."
+                    }
+                elif response.status_code == 404:
+                    # Job not found - might be invalid job name or truly not ready
+                    print(f"[tamarind] Results not ready (attempt {attempt}/{int(timeout/poll_interval)})")
+                elif response.status_code == 400:
+                    # 400 can mean "job not complete" - parse status from response
+                    error_detail = response.text[:300] if response.text else "No details"
+                    
+                    # Extract job status from response (e.g., "Status: Running", "Status: In Queue")
+                    job_status = self._parse_job_status_from_400(error_detail)
+                    
+                    # Check if this is a terminal failure status
+                    if job_status and job_status.lower() in ["failed", "error", "cancelled", "canceled", "stopped"]:
+                        print(f"[tamarind] ❌ Job failed with status: {job_status}")
+                        
+                        # Try to get more details about why the job failed
+                        failure_details = self._get_job_failure_details(job_name)
+                        
+                        return {
+                            "status": "failed",
+                            "job_name": job_name,
+                            "error": f"Job failed with status: {job_status}",
+                            "elapsed_seconds": elapsed,
+                            "message": f"Job '{job_name}' failed with status: {job_status}. Response: {error_detail}",
+                            "failure_details": failure_details,
+                        }
+                    elif job_status:
+                        # Job is still running (In Queue, Running, etc.)
+                        print(f"[tamarind] Job status: {job_status} (attempt {attempt}/{int(timeout/poll_interval)})")
+                    else:
+                        # Unknown 400 response - log and keep polling
+                        print(f"[tamarind] Result check returned 400 (attempt {attempt}): {error_detail}")
+                elif response.status_code in (500, 502, 503, 504):
+                    # Server error - job may still be running
+                    print(f"[tamarind] Result check returned {response.status_code} (attempt {attempt})")
+                else:
+                    print(f"[tamarind] Unexpected status {response.status_code} (attempt {attempt})")
+                    
+            except requests.exceptions.RequestException as e:
+                last_error = str(e)
+                print(f"[tamarind] Request error (attempt {attempt}): {e}")
+            except Exception as e:
+                last_error = str(e)
+                print(f"[tamarind] Error (attempt {attempt}): {e}")
+            
+            if elapsed + poll_interval < timeout:
+                time.sleep(poll_interval)
+            else:
+                break
+        
+        # Still not ready after polling
+        elapsed = int(time.time() - start_time)
+        print(f"[tamarind] ⏳ Job '{job_name}' still not ready after {elapsed}s of polling.")
+        return {
+            "status": "pending",
+            "job_name": job_name,
+            "elapsed_seconds": elapsed,
+            "last_error": last_error,
+            "message": (
+                f"Job '{job_name}' results still not available after {elapsed}s polling. "
+                f"The job may still be running. Try again later with tamarind_poll_results, "
+                f"or check https://app.tamarind.bio"
+            )
+        }
     
     def submit_batch(self, jobs: list[dict]) -> list[dict]:
         """
