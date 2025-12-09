@@ -1,0 +1,9 @@
+numpy>=1.20.0
+biopython>=1.79
+requests>=2.25.0
+python-dotenv>=0.19.0
+
+# Optional: PyRosetta (not required for the main pipeline)
+# PyRosetta must be obtained from https://www.pyrosetta.org/
+# Not available via pip - requires license
+
