@@ -197,19 +197,37 @@ TOOLS = [
 # =============================================================================
 
 class AgentTools:
-    """Tool implementations for the agent."""
+    """Tool implementations for the agent with session-scoped job tracking."""
     
-    def __init__(self, task_dir: Path, output_dir: Path):
+    def __init__(self, task_dir: Path, output_dir: Path, session_id: str):
         self.task_dir = task_dir
         self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.session_id = session_id
         self._tamarind: Optional[TamarindClient] = None
+        
+        # Track agent execution metadata
+        self.execution_start = datetime.now()
+        self.tool_calls: list[dict] = []
         
     @property
     def tamarind(self) -> TamarindClient:
         if self._tamarind is None:
-            self._tamarind = TamarindClient()
+            # Create client with session ID to track jobs
+            self._tamarind = TamarindClient(session_id=self.session_id)
+            print(f"[agent] Tamarind session: {self.session_id}")
         return self._tamarind
+    
+    def get_execution_summary(self) -> dict:
+        """Get summary of agent execution for logging."""
+        tamarind_summary = self.tamarind.get_session_summary() if self._tamarind else {}
+        return {
+            "session_id": self.session_id,
+            "execution_start": self.execution_start.isoformat(),
+            "execution_end": datetime.now().isoformat(),
+            "tool_calls_count": len(self.tool_calls),
+            "tamarind": tamarind_summary,
+        }
     
     def read_file(self, path: str) -> str:
         full_path = self.task_dir / path
@@ -349,7 +367,16 @@ class AgentTools:
         
         try:
             result = self.tamarind.upload_file(str(full_path))
-            return f"Upload successful: {json.dumps(result)}"
+            # Provide clear instructions about how to reference the file
+            filename = result.get("filename", Path(filepath).name)
+            return (
+                f"Upload successful!\n"
+                f"  Filename on Tamarind: {filename}\n"
+                f"  Session ID: {self.session_id}\n"
+                f"  Files uploaded this session: {list(self.tamarind.get_session_files().keys())}\n\n"
+                f"To use this file in a job, reference it as: \"{filename}\"\n"
+                f"Example: {{\"pdbFile\": \"{filename}\"}}"
+            )
         except Exception as e:
             return f"Error uploading: {e}"
     
@@ -358,15 +385,39 @@ class AgentTools:
             result = self.tamarind.submit_job_sync(tool_name, params, timeout=600)
             
             if "job_name" in result:
-                download_path = self.tamarind.download_results(
-                    result["job_name"], 
-                    output_dir=str(self.output_dir / "tamarind_results")
-                )
-                result["downloaded_to"] = str(download_path)
+                try:
+                    download_path = self.tamarind.download_results(
+                        result["job_name"], 
+                        output_dir=str(self.output_dir / "tamarind_results")
+                    )
+                    result["downloaded_to"] = str(download_path)
+                except Exception as download_error:
+                    result["download_error"] = str(download_error)
+                    result["note"] = "Job completed but result download failed. Results may be available on Tamarind web UI."
             
             return json.dumps(result, indent=2, default=str)
         except Exception as e:
-            return f"Error: {e}"
+            error_msg = str(e)
+            
+            # Provide helpful context based on error type
+            if "500" in error_msg and "/jobs" in error_msg:
+                return (
+                    f"Error: Tamarind API status endpoint returned 500 error.\n"
+                    f"This is a transient server issue on Tamarind's side.\n"
+                    f"The job may have been submitted successfully - check https://app.tamarind.bio\n\n"
+                    f"Details: {error_msg}"
+                )
+            elif "400" in error_msg:
+                return (
+                    f"Error: Bad request (400) - check your parameters.\n"
+                    f"Common issues:\n"
+                    f"  - File not uploaded (use tamarind_upload_file first)\n"
+                    f"  - Wrong parameter format (dict vs string)\n"
+                    f"  - Missing required parameters\n\n"
+                    f"Details: {error_msg}"
+                )
+            else:
+                return f"Error: {error_msg}"
     
     def execute_tool(self, tool_name: str, arguments: dict) -> str:
         handlers = {
@@ -403,21 +454,31 @@ def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", o
     name = output_name or datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = task_dir / "agent_output" / name
     
+    # Generate unique session ID for tracking jobs
+    session_id = f"{name}_{datetime.now().strftime('%H%M%S_%f')}"
+    
     if not task_dir.exists():
         print(f"Error: Task directory not found: {task_dir}")
         return
+    
+    # Ensure clean output directory (no contamination from previous runs)
+    if output_dir.exists():
+        print(f"Warning: Output directory already exists: {output_dir}")
+        print("  Results from previous runs may contaminate evaluation.")
+        print("  Consider using a fresh output name or clearing the directory.")
     
     print("=" * 60)
     print("AI Agent for Computational Biology")
     print("=" * 60)
     print(f"Task: {task_name}")
     print(f"Output: {output_dir}")
+    print(f"Session ID: {session_id}")
     print(f"Model: {model}")
     print(f"Max iterations: {max_iterations}")
     print()
     
     client = OpenAI()
-    tools = AgentTools(task_dir, output_dir)
+    tools = AgentTools(task_dir, output_dir, session_id)
     
     # Load task description from question.md if it exists
     question_path = task_dir / "question.md"
@@ -453,6 +514,25 @@ GENERAL WORKFLOW:
    c. Submit jobs with tamarind_submit_job
 5. Save intermediate and final results as JSON/CSV files
 6. Call task_complete with a summary when finished
+
+IMPORTANT - TAMARIND TOOL USAGE:
+- ALWAYS call tamarind_get_tool_spec before using any tool
+- For dict-type parameters (bias_AA_per_residue, omit_AA_per_residue, etc.):
+  Pass as actual JSON objects, NOT as stringified JSON.
+  CORRECT: "omit_AA_per_residue" should be a dict like {{"A1": "H", "A2": "K"}}
+  WRONG:   Do NOT pass as string like "{{...}}" or JSON.stringify
+- If a tool call fails with 400 error, check parameter types carefully
+- If a tool call fails with 500 error, it may be a transient server issue - the system will retry automatically
+- Common tools: esmfold (sequence to structure), proteinmpnn (structure to sequence)
+
+FILE UPLOAD REQUIREMENTS:
+- Before using a file (pdbFile, templateFile, etc.) in a Tamarind job, you MUST upload it first
+- Call tamarind_upload_file with the file path to upload it
+- After upload, use ONLY the filename (not the full path) in job parameters
+- Example workflow:
+  1. tamarind_upload_file("data/scaffold.pdb")  -> Returns filename "scaffold.pdb"
+  2. tamarind_submit_job("proteinmpnn", {{"pdbFile": "scaffold.pdb", ...}})
+- Files are session-scoped: only files you uploaded in this session can be used
 
 PYTHON ENVIRONMENT:
 - BioPython: PDBParser, ShrakeRupley (for SASA), seq1, SeqIO, NeighborSearch
@@ -526,10 +606,29 @@ Be methodical, save intermediate results, and try alternatives if something fail
         log_data = [msg.model_dump() if hasattr(msg, "model_dump") else msg for msg in messages]
         json.dump(log_data, f, indent=2, default=str)
     
+    # Save session metadata for provenance tracking
+    session_info = tools.get_execution_summary()
+    session_info["iterations"] = iteration
+    session_info["task_completed"] = task_completed
+    session_info["model"] = model
+    
+    session_path = output_dir / "session_info.json"
+    with open(session_path, "w") as f:
+        json.dump(session_info, f, indent=2, default=str)
+    
     print(f"\n{'=' * 60}")
     print(f"Agent finished after {iteration} iterations")
+    print(f"Session ID: {session_id}")
+    tamarind_info = session_info.get('tamarind', {})
+    print(f"Files uploaded: {tamarind_info.get('file_count', 0)}")
+    print(f"Jobs submitted: {tamarind_info.get('job_count', 0)}")
+    if tamarind_info.get('files_uploaded'):
+        print(f"  Files: {tamarind_info['files_uploaded']}")
+    if tamarind_info.get('jobs_submitted'):
+        print(f"  Jobs: {tamarind_info['jobs_submitted']}")
     print(f"Outputs saved to: {output_dir}")
     print(f"Conversation log: {log_path}")
+    print(f"Session info: {session_path}")
 
 
 def main():
