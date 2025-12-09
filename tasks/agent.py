@@ -5,7 +5,6 @@ Task-Agnostic AI Agent for Computational Biology
 This agent uses OpenAI's function calling to work on computational biology
 tasks defined in task directories. Each task should have:
 - question.md: Task description and requirements
-- data/: Input data files
 
 Usage:
     python agent.py --task <task_name> [--max-iterations 20]
@@ -42,13 +41,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "read_file",
-            "description": "Read the contents of a file (PDB, JSON, CSV, Python, etc.).",
+            "description": "Read the contents of a file from your session output directory.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Path to the file (relative to task directory)"
+                        "description": "Filename or relative path within your session output directory."
                     }
                 },
                 "required": ["path"]
@@ -59,13 +58,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "write_file",
-            "description": "Write content to a file in the output directory.",
+            "description": "Write content to a file in YOUR session output directory. All outputs are isolated per run.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Path to write (relative to output directory)"
+                        "description": "Filename or relative path for output (e.g., 'results.json', 'analysis/data.csv')"
                     },
                     "content": {
                         "type": "string",
@@ -80,13 +79,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "list_directory",
-            "description": "List files and directories in a path.",
+            "description": "List files in a directory. Use 'data' for input files, '' for task root.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Directory path (relative to task directory)"
+                        "description": "Directory path: 'data' for inputs, '' for task root, or path in your outputs"
                     }
                 },
                 "required": ["path"]
@@ -97,13 +96,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "run_python",
-            "description": "Execute Python code. Available: numpy (np), pandas (pd), BioPython (Bio, PDBParser, ShrakeRupley, seq1, SeqIO), json, Path, os. Use print() for output.",
+            "description": "Execute Python code. CRITICAL: (1) Each call is ISOLATED - variables do NOT persist between calls. (2) You MUST use print() to see output. (3) Save results to JSON files if needed in later calls. Available: numpy, pandas, BioPython (PDBParser, ShrakeRupley, seq1, SeqIO, PDBList), json, Path, os, urllib.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "code": {
                         "type": "string",
-                        "description": "Python code to execute"
+                        "description": "Python code to execute. Use print() for output. Variables don't persist - save to files."
                     }
                 },
                 "required": ["code"]
@@ -194,13 +193,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "task_complete",
-            "description": "Call when you have completed the task with a summary.",
+            "description": "Call ONLY when you have successfully completed the task AND produced the required deliverables. Do NOT call if you encountered failures you haven't resolved - keep trying alternatives instead.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "summary": {
                         "type": "string",
-                        "description": "Summary of completed work and key findings"
+                        "description": "Summary of completed work, deliverables produced, and key findings. List what was achieved, not what failed."
                     }
                 },
                 "required": ["summary"]
@@ -248,11 +247,10 @@ class AgentTools:
         }
     
     def read_file(self, path: str) -> str:
-        full_path = self.task_dir / path
+        # Only read from agent's own output directory
+        full_path = self.output_dir / path
         if not full_path.exists():
-            full_path = self.output_dir / path
-        if not full_path.exists():
-            return f"Error: File not found: {path}"
+            return f"Error: File not found: {path}. Download data first using urllib or PDBList in run_python."
         
         try:
             content = full_path.read_text()
@@ -272,9 +270,8 @@ class AgentTools:
             return f"Error writing file: {e}"
     
     def list_directory(self, path: str) -> str:
-        full_path = self.task_dir / path
-        if not full_path.exists():
-            full_path = self.output_dir / path
+        # Only list within agent's own output directory
+        full_path = self.output_dir / path if path else self.output_dir
         if not full_path.exists():
             return f"Error: Directory not found: {path}"
         
@@ -293,7 +290,8 @@ class AgentTools:
         from contextlib import redirect_stdout, redirect_stderr
         
         original_cwd = os.getcwd()
-        os.chdir(self.task_dir)
+        # Set working directory to agent's output dir so relative writes go there
+        os.chdir(self.output_dir)
         
         exec_globals = {
             "__builtins__": __builtins__,
@@ -315,22 +313,25 @@ class AgentTools:
         
         try:
             import Bio
-            from Bio.PDB import PDBParser, NeighborSearch, PDBIO, Selection
+            from Bio.PDB import PDBParser, NeighborSearch, PDBIO, Selection, PDBList
             from Bio.PDB.SASA import ShrakeRupley
             from Bio.SeqUtils import seq1
             from Bio import SeqIO
             exec_globals.update({
                 "Bio": Bio, "PDBParser": PDBParser, "ShrakeRupley": ShrakeRupley,
                 "NeighborSearch": NeighborSearch, "PDBIO": PDBIO, "Selection": Selection,
-                "seq1": seq1, "SeqIO": SeqIO
+                "PDBList": PDBList, "seq1": seq1, "SeqIO": SeqIO
             })
         except ImportError:
             pass
         
-        exec_globals["TASK_DIR"] = self.task_dir
+        # Provide output path - working directory is set to OUTPUT_DIR
         exec_globals["OUTPUT_DIR"] = self.output_dir
-        exec_globals["task_dir"] = str(self.task_dir)
         exec_globals["output_dir"] = str(self.output_dir)
+        
+        # Add urllib for downloading data
+        import urllib.request
+        exec_globals["urllib"] = urllib
         
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -377,11 +378,10 @@ class AgentTools:
             return f"Error: {e}"
     
     def tamarind_upload_file(self, filepath: str) -> str:
-        full_path = self.task_dir / filepath
+        # Only upload files from agent's output directory
+        full_path = self.output_dir / filepath
         if not full_path.exists():
-            full_path = self.output_dir / filepath
-        if not full_path.exists():
-            return f"Error: File not found: {filepath}"
+            return f"Error: File not found: {filepath}. Download data first using urllib or PDBList in run_python."
         
         try:
             result = self.tamarind.upload_file(str(full_path))
@@ -617,6 +617,13 @@ IMPORTANT - TAMARIND TOOL USAGE:
 - If a tool call fails with 500 error, it may be a transient server issue - the system will retry automatically
 - Common tools: esmfold (sequence to structure), proteinmpnn (structure to sequence)
 
+IF A TAMARIND JOB FAILS:
+- Check the error message carefully for hints about what went wrong
+- Try simplifying parameters (remove optional ones, use defaults)
+- Try a different tool that can achieve the same goal (e.g., esmfold instead of alphafold)
+- If bias parameters fail, try without them first to verify the basic job works
+- Do NOT give up after one failure - iterate and debug
+
 ASYNC JOB HANDLING (IMPORTANT):
 - tamarind_submit_job waits up to 10 minutes for results
 - If the job takes longer, it returns status="pending" with the job_name
@@ -629,18 +636,38 @@ ASYNC JOB HANDLING (IMPORTANT):
 
 FILE UPLOAD REQUIREMENTS:
 - Before using a file (pdbFile, templateFile, etc.) in a Tamarind job, you MUST upload it first
-- Call tamarind_upload_file with the file path to upload it
+- First download/create the file, then call tamarind_upload_file to upload it
 - After upload, use ONLY the filename (not the full path) in job parameters
 - Example workflow:
-  1. tamarind_upload_file("data/scaffold.pdb")  -> Returns filename "scaffold.pdb"
-  2. tamarind_submit_job("proteinmpnn", {{"pdbFile": "scaffold.pdb", ...}})
+  1. Download PDB: urllib.request.urlretrieve("https://files.rcsb.org/download/5L33.pdb", "scaffold.pdb")
+  2. tamarind_upload_file("scaffold.pdb")  -> Returns filename "scaffold.pdb"
+  3. tamarind_submit_job("proteinmpnn", {{"pdbFile": "scaffold.pdb", ...}})
 - Files are session-scoped: only files you uploaded in this session can be used
 
 PYTHON ENVIRONMENT:
-- BioPython: PDBParser, ShrakeRupley (for SASA), seq1, SeqIO, NeighborSearch
-- NumPy, Pandas, json, Path, os are available
-- Use print() to output results
-- Current working directory is set to the task directory
+- Working directory is YOUR session output folder
+- OUTPUT_DIR / output_dir: Your session output directory (same as cwd)
+- Available: numpy, pandas, BioPython, json, Path, os, urllib
+
+DATA ACCESS:
+- Download data from public sources (e.g., RCSB PDB, UniProt) to YOUR session directory
+- Working directory is YOUR isolated session folder - all relative paths save there
+- Example: urllib.request.urlretrieve("https://files.rcsb.org/download/5L33.pdb", "scaffold.pdb")
+- Example: PDBList().retrieve_pdb_file("5L33", file_format="pdb", pdir=output_dir)
+- IMPORTANT: All files (downloaded, created, outputs) stay in your session directory
+
+OUTPUT FILES:
+- Write to current directory or output_dir (they're the same)
+- Do NOT reference any "output/" or "data/" directories
+- All your results should be saved via write_file() or in Python to cwd/output_dir
+
+PERSISTENCE - DO NOT GIVE UP EASILY:
+- If a computation fails, DEBUG IT - check error messages, fix the code, try again
+- If a Tamarind job fails, try different parameters or alternative tools
+- If one approach doesn't work, try a different approach to achieve the same goal
+- You have many iterations available - use them to iterate and improve
+- ONLY call task_complete when you have actually produced the required deliverables
+- A failed attempt is NOT a completed task - keep trying until you succeed or exhaust alternatives
 
 Be methodical, save intermediate results, and try alternatives if something fails."""
 
