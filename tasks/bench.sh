@@ -27,7 +27,7 @@ if [ "$1" = "all" ]; then
         for diff in "${DIFFS[@]}"; do
             while [ $(jobs -r | wc -l) -ge $MAX_JOBS ]; do sleep 1; done
             
-            run="${model}_${diff}"
+            run="${model}_${diff}_$(date +%m%d%H%M)"
             logdir="$TASK/agent_output/$run"
             mkdir -p "$logdir"
             
@@ -42,7 +42,7 @@ if [ "$1" = "all" ]; then
 else
     DIFF="${1:-medium}"
     MODEL="${2:-gpt-4o}"
-    RUN="${3:-${MODEL}_${DIFF}_$(date +%Y%m%d_%H%M%S)}"
+    RUN="${3:-${MODEL}_${DIFF}_$(date +%m%d%H%M)}"
     
     echo "=== $TASK: $DIFF / $MODEL -> $RUN ==="
     run_single "$DIFF" "$MODEL" "$RUN"
