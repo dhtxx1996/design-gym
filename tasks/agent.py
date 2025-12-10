@@ -512,6 +512,10 @@ class AgentTools:
             if tool_name in ("list_directory", "task_complete"):
                 return
             
+            # Helper to get just filename from path
+            def basename(p: str) -> str:
+                return Path(p).name
+            
             # Determine inputs and outputs based on tool type
             inputs = []
             outputs = []
@@ -520,14 +524,14 @@ class AgentTools:
                 path = arguments.get("path", "file")
                 artifact_id = f"file:{path}"
                 if artifact_id not in self.dag.nodes:
-                    self.dag.add_artifact(path, artifact_id=artifact_id)
+                    self.dag.add_artifact(basename(path), artifact_id=artifact_id)
                 inputs.append(artifact_id)
                 
             elif tool_name == "write_file":
                 path = arguments.get("path", "file")
                 artifact_id = f"file:{path}"
                 if artifact_id not in self.dag.nodes:
-                    self.dag.add_artifact(path, artifact_id=artifact_id)
+                    self.dag.add_artifact(basename(path), artifact_id=artifact_id)
                 outputs.append(artifact_id)
                 
             elif tool_name == "run_python":
@@ -543,18 +547,18 @@ class AgentTools:
                 for path in writes:
                     artifact_id = f"file:{path}"
                     if artifact_id not in self.dag.nodes:
-                        self.dag.add_artifact(path, artifact_id=artifact_id)
+                        self.dag.add_artifact(basename(path), artifact_id=artifact_id)
                     outputs.append(artifact_id)
                     
             elif tool_name == "tamarind_upload_file":
                 path = arguments.get("filepath", "file")
                 artifact_id = f"file:{path}"
                 if artifact_id not in self.dag.nodes:
-                    self.dag.add_artifact(path, artifact_id=artifact_id)
+                    self.dag.add_artifact(basename(path), artifact_id=artifact_id)
                 inputs.append(artifact_id)
                 # Output is the uploaded reference
                 upload_id = f"tamarind:{path}"
-                self.dag.add_artifact(f"uploaded:{path}", artifact_id=upload_id)
+                self.dag.add_artifact(basename(path), artifact_id=upload_id)
                 outputs.append(upload_id)
                 
             elif tool_name == "tamarind_submit_job":
