@@ -195,8 +195,42 @@ class DAGTracker:
             
         return dag
     
+    def _find_connected_components(self) -> list[set[str]]:
+        """Find connected components in the DAG (treating as undirected graph)."""
+        # Build undirected adjacency
+        adj = {nid: set() for nid in self.nodes}
+        for edge in self.edges:
+            adj[edge.source].add(edge.target)
+            adj[edge.target].add(edge.source)
+        
+        visited = set()
+        components = []
+        
+        def bfs(start: str) -> set[str]:
+            component = set()
+            queue = [start]
+            while queue:
+                node = queue.pop(0)
+                if node in visited:
+                    continue
+                visited.add(node)
+                component.add(node)
+                for neighbor in adj[node]:
+                    if neighbor not in visited:
+                        queue.append(neighbor)
+            return component
+        
+        for node_id in self.nodes:
+            if node_id not in visited:
+                component = bfs(node_id)
+                if component:
+                    components.append(component)
+        
+        return components
+    
     def visualize(self, output_path: str | Path = None, title: str = "Execution DAG", 
-                  figsize: tuple = (14, 10), dpi: int = 150) -> None:
+                  figsize: tuple = (14, 10), dpi: int = 150,
+                  min_cluster_size: int = 3, show_all: bool = False) -> None:
         """
         Visualize the DAG with a pleasant hierarchical layout.
         
@@ -207,6 +241,8 @@ class DAGTracker:
             title: Figure title
             figsize: Figure size (width, height)
             dpi: Resolution for saved figure
+            min_cluster_size: Minimum number of nodes in a cluster to display (default: 3)
+            show_all: If True, show all nodes regardless of cluster size (default: False)
         """
         import matplotlib.pyplot as plt
         import matplotlib.patches as mpatches
@@ -217,22 +253,46 @@ class DAGTracker:
             print("No nodes to visualize")
             return
         
-        # Build adjacency for layout computation
-        adj = {nid: [] for nid in self.nodes}
-        in_degree = {nid: 0 for nid in self.nodes}
-        for edge in self.edges:
+        # Filter nodes by cluster size if not showing all
+        if show_all:
+            nodes_to_show = set(self.nodes.keys())
+        else:
+            components = self._find_connected_components()
+            nodes_to_show = set()
+            for component in components:
+                if len(component) >= min_cluster_size:
+                    nodes_to_show.update(component)
+        
+        if not nodes_to_show:
+            print(f"No clusters with at least {min_cluster_size} nodes to visualize")
+            return
+        
+        # Filter edges to only include those between shown nodes
+        edges_to_show = [e for e in self.edges if e.source in nodes_to_show and e.target in nodes_to_show]
+        
+        # Build adjacency for layout computation (using filtered nodes)
+        adj = {nid: [] for nid in nodes_to_show}
+        in_degree = {nid: 0 for nid in nodes_to_show}
+        for edge in edges_to_show:
             adj[edge.source].append(edge.target)
             in_degree[edge.target] += 1
         
         # Compute layers using topological sort (Kahn's algorithm)
-        layers = self._compute_layers(adj, in_degree)
+        layers = self._compute_layers_filtered(adj, in_degree, nodes_to_show)
         
         # Compute positions with layer-based layout
-        positions = self._compute_positions(layers)
+        positions = self._compute_positions_filtered(layers, edges_to_show)
         
-        # Create figure
-        fig, ax = plt.subplots(figsize=figsize)
-        ax.set_aspect('equal')
+        # Create figure - compute optimal size based on graph dimensions
+        max_layer_size = max(len(layer) for layer in layers) if layers else 1
+        num_layers = len(layers)
+        
+        # Dynamic figure size: wider for more layers, taller for bigger layers
+        fig_width = max(figsize[0], num_layers * 4.0)  # More width per layer
+        fig_height = max(figsize[1], max_layer_size * 0.8)
+        
+        fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+        # Don't force equal aspect - let it stretch naturally
         
         # Color scheme (matching example image style)
         colors = {
@@ -253,10 +313,10 @@ class DAGTracker:
         }
         
         # Draw edges first (behind nodes)
-        self._draw_edges(ax, positions)
+        self._draw_edges_filtered(ax, positions, edges_to_show)
         
         # Draw nodes
-        self._draw_nodes(ax, positions, colors)
+        self._draw_nodes_filtered(ax, positions, colors, nodes_to_show)
         
         # Set limits with padding
         all_x = [p[0] for p in positions.values()]
@@ -282,9 +342,13 @@ class DAGTracker:
         plt.close()
     
     def _compute_layers(self, adj: dict, in_degree: dict) -> list[list[str]]:
-        """Compute node layers using modified Kahn's algorithm."""
+        """Compute node layers using Kahn's algorithm with balanced distribution."""
+        return self._compute_layers_filtered(adj, in_degree, set(self.nodes.keys()))
+    
+    def _compute_layers_filtered(self, adj: dict, in_degree: dict, nodes_to_show: set[str]) -> list[list[str]]:
+        """Compute node layers using Kahn's algorithm with balanced distribution."""
         layers = []
-        remaining = set(self.nodes.keys())
+        remaining = set(nodes_to_show)
         current_in_degree = in_degree.copy()
         
         while remaining:
@@ -306,28 +370,86 @@ class DAGTracker:
         return layers
     
     def _compute_positions(self, layers: list[list[str]]) -> dict[str, tuple]:
-        """Compute node positions from layers with optimized ordering."""
-        positions = {}
+        """Compute node positions from layers with multi-pass crossing reduction."""
+        return self._compute_positions_filtered(layers, self.edges)
+    
+    def _compute_positions_filtered(self, layers: list[list[str]], edges: list[Edge]) -> dict[str, tuple]:
+        """Compute node positions from layers with multi-pass crossing reduction."""
+        x_spacing = 4.5  # Horizontal spacing between layers
         
-        x_spacing = 3.5  # Horizontal spacing between layers (wider for full labels)
-        y_spacing = 1.2  # Vertical spacing between nodes in same layer
+        # Dynamic y_spacing based on max layer size for more compact layout
+        max_layer_size = max(len(layer) for layer in layers) if layers else 1
+        y_spacing = max(1.0, min(1.4, 20 / max_layer_size))  # Tighter for large layers
         
-        # Build reverse adjacency for ordering optimization
-        predecessors = {nid: [] for nid in self.nodes}
-        for edge in self.edges:
-            predecessors[edge.target].append(edge.source)
+        # Collect all nodes in layers
+        all_layer_nodes = set()
+        for layer in layers:
+            all_layer_nodes.update(layer)
         
-        for layer_idx, layer in enumerate(layers):
-            x = layer_idx * x_spacing
-            
-            # Order nodes in layer to minimize edge crossings (barycenter heuristic)
-            if layer_idx > 0:
-                def barycenter(node):
+        # Build adjacency structures
+        predecessors = {nid: [] for nid in all_layer_nodes}
+        successors = {nid: [] for nid in all_layer_nodes}
+        for edge in edges:
+            if edge.source in all_layer_nodes and edge.target in all_layer_nodes:
+                predecessors[edge.target].append(edge.source)
+                successors[edge.source].append(edge.target)
+        
+        # Create mutable layer lists and initial ordering
+        layers = [list(layer) for layer in layers]
+        
+        # Assign initial y-positions (needed for barycenter)
+        node_y = {}
+        for layer in layers:
+            for i, node in enumerate(layer):
+                node_y[node] = i
+        
+        def median(values):
+            """Get median of values list."""
+            if not values:
+                return 0
+            s = sorted(values)
+            n = len(s)
+            if n % 2 == 1:
+                return s[n // 2]
+            return (s[n // 2 - 1] + s[n // 2]) / 2
+        
+        # Multi-pass barycenter/median heuristic
+        num_passes = 4
+        for pass_num in range(num_passes):
+            # Forward pass (left to right)
+            for layer_idx in range(1, len(layers)):
+                layer = layers[layer_idx]
+                
+                def forward_score(node):
                     preds = predecessors[node]
                     if not preds:
-                        return 0
-                    return sum(positions[p][1] for p in preds if p in positions) / len(preds)
-                layer = sorted(layer, key=barycenter)
+                        return node_y.get(node, 0)
+                    return median([node_y[p] for p in preds if p in node_y])
+                
+                layers[layer_idx] = sorted(layer, key=forward_score)
+                # Update y positions
+                for i, node in enumerate(layers[layer_idx]):
+                    node_y[node] = i
+            
+            # Backward pass (right to left)
+            for layer_idx in range(len(layers) - 2, -1, -1):
+                layer = layers[layer_idx]
+                
+                def backward_score(node):
+                    succs = successors[node]
+                    if not succs:
+                        return node_y.get(node, 0)
+                    return median([node_y[s] for s in succs if s in node_y])
+                
+                layers[layer_idx] = sorted(layer, key=backward_score)
+                # Update y positions
+                for i, node in enumerate(layers[layer_idx]):
+                    node_y[node] = i
+        
+        # Compute final positions
+        positions = {}
+        for layer_idx, layer in enumerate(layers):
+            x = layer_idx * x_spacing
             
             # Center the layer vertically
             layer_height = (len(layer) - 1) * y_spacing
@@ -340,12 +462,16 @@ class DAGTracker:
         return positions
     
     def _draw_edges(self, ax, positions: dict) -> None:
-        """Draw curved bezier edges between nodes."""
+        """Draw curved bezier edges between nodes with smart routing."""
+        self._draw_edges_filtered(ax, positions, self.edges)
+    
+    def _draw_edges_filtered(self, ax, positions: dict, edges: list[Edge]) -> None:
+        """Draw curved bezier edges between nodes with smart routing."""
         from matplotlib.patches import FancyArrowPatch
         from matplotlib.path import Path as MPath
         import matplotlib.patches as mpatches
         
-        for edge in self.edges:
+        for edge in edges:
             if edge.source not in positions or edge.target not in positions:
                 continue
                 
@@ -355,17 +481,28 @@ class DAGTracker:
             # Compute node widths based on label lengths
             src_label = self.nodes[edge.source].label
             tgt_label = self.nodes[edge.target].label
-            src_width = max(1.5, len(src_label) * 0.12)
-            tgt_width = max(1.5, len(tgt_label) * 0.12)
+            src_width = max(1.5, len(src_label) * 0.18)
+            tgt_width = max(1.5, len(tgt_label) * 0.18)
             
             x1 += src_width / 2
             x2 -= tgt_width / 2
             
-            # Bezier control points for smooth curves
+            # Compute bezier control points based on distance
             dx = x2 - x1
-            ctrl_offset = dx * 0.4
+            dy = y2 - y1
             
-            # Path with bezier curve
+            # Adjust curve based on vertical distance
+            # More vertical distance = more horizontal control offset for smoother S-curves
+            vertical_factor = min(abs(dy) / 3.0, 1.0)  # Normalize
+            base_offset = dx * 0.35
+            extra_offset = dx * 0.15 * vertical_factor
+            ctrl_offset = base_offset + extra_offset
+            
+            # For edges going backwards (shouldn't happen in DAG, but handle it)
+            if dx <= 0:
+                ctrl_offset = max(1.0, abs(dy) * 0.5)
+            
+            # Path with bezier curve - smooth S-curve
             verts = [
                 (x1, y1),
                 (x1 + ctrl_offset, y1),
@@ -379,26 +516,24 @@ class DAGTracker:
                 path,
                 facecolor='none',
                 edgecolor='#888888',
-                linewidth=1.5,
-                alpha=0.7,
+                linewidth=1.2,
+                alpha=0.6,
             )
             ax.add_patch(patch)
             
-            # Add arrowhead
-            arrow = FancyArrowPatch(
-                (x2 - 0.15, y2), (x2, y2),
-                arrowstyle='-|>',
-                mutation_scale=12,
-                color='#888888',
-                linewidth=1.5,
-            )
-            ax.add_patch(arrow)
+            # No arrowhead - clean line only
     
     def _draw_nodes(self, ax, positions: dict, colors: dict) -> None:
+        """Draw nodes as rounded rectangles with labels."""
+        self._draw_nodes_filtered(ax, positions, colors, set(self.nodes.keys()))
+    
+    def _draw_nodes_filtered(self, ax, positions: dict, colors: dict, nodes_to_show: set[str]) -> None:
         """Draw nodes as rounded rectangles with labels."""
         from matplotlib.patches import FancyBboxPatch
         
         for node_id, (x, y) in positions.items():
+            if node_id not in nodes_to_show:
+                continue
             node = self.nodes[node_id]
             
             # Determine color based on node type and metadata
@@ -409,8 +544,8 @@ class DAGTracker:
             
             # Node dimensions - width based on label length
             label = node.label
-            width = max(1.5, len(label) * 0.12)
-            height = 0.5
+            width = max(1.5, len(label) * 0.18)
+            height = 0.55  # 1.1x taller than original 0.5
             
             # Draw rounded rectangle
             bbox = FancyBboxPatch(
@@ -423,9 +558,9 @@ class DAGTracker:
             )
             ax.add_patch(bbox)
             
-            # Add full label (no truncation)
+            # Add full label (no truncation) - monospace font
             ax.text(x, y, label, ha='center', va='center',
-                   fontsize=8, fontweight='bold', color='#222222')
+                   fontsize=7.5, fontweight='medium', fontfamily='monospace', color='#222222')
     
     def _get_artifact_color(self, node: Node, palette: dict) -> str:
         """Get color for artifact node based on its properties."""
