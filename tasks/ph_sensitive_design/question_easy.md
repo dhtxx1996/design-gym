@@ -40,12 +40,12 @@ PRO: 159, SER: 155, THR: 172, TRP: 285, TYR: 263, VAL: 174
 - Choose the pair closest to optimal distance (~6.5 Å for His-His)
 
 ### Step 3: Design Sequences with ProteinMPNN
-**Goal**: Redesign the protein sequence while keeping the His network fixed.
+**Goal**: Redesign the protein sequence while constraining the His network positions.
 
 **Method**: Use ProteinMPNN via Tamarind API:
 - Upload the scaffold PDB
-- Set `bias_AA_per_residue` to force His (or Arg/Lys) at network positions (bias = 100.0)
-- Generate **at least 1 seuqnce ** with temperature = 0.1
+- Constrain network residues using `bias_AA_per_residue` with positive bias (e.g., 5.0-100.0) to favor His (or Arg/Lys) at network positions
+- Generate **at least 1 sequence** with temperature = 0.1
 - Verify output sequences have correct residues at network positions
 
 ### Step 4: Validate with Structure Prediction

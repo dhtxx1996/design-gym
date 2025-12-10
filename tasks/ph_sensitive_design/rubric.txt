@@ -1,6 +1,6 @@
 Total Points: 100
 
-Notes: The key to a full-score answer is demonstrating a complete understanding of the computational protein design workflow for pH-sensitive monomer destabilization for a de novo designed NTF2 fold (PDB ID 5L33, downloaded from RCSB PDB): (1) correctly identifying buried core residues suitable for pH sensing (SASA < 0.25), (2) finding buried His-containing hydrogen bond networks (His–His, His–Arg, His–Lys) within the core using PyRosetta HBNet when available OR justified geometric methods when PyRosetta is unavailable, (3) filtering networks based on H-bond energy (< -0.5 kcal/mol) when PyRosetta is available OR using geometric criteria/skipping with justification when unavailable, (4) using ProteinMPNN to redesign environmental residues around the selected network while fixing the network residues, (5) validating designs through structure prediction (ESMFold/AlphaFold) and filtering based on confidence metrics (pLDDT), (6) explaining conceptual understanding of why Histidine is chosen (pKa ~6.0) and why networks must be buried (pKa shift), and (7) discussing biological applications (endosomal release, biosensing). Full credit is awarded for using justified alternative methods when PyRosetta is unavailable.
+Notes: The key to a full-score answer is demonstrating a complete understanding of the computational protein design workflow for pH-sensitive monomer destabilization for a de novo designed NTF2 fold (PDB ID 5L33, downloaded from RCSB PDB): (1) correctly identifying buried core residues suitable for pH sensing (SASA < 0.25), (2) finding buried His-containing hydrogen bond networks (His–His, His–Arg, His–Lys) within the core using PyRosetta HBNet OR geometric analysis methods with justified distance/angle criteria, (3) filtering or scoring candidate networks using energy-based methods (PyRosetta recommended) OR geometric criteria OR other justified quality control approaches, (4) using ProteinMPNN to redesign environmental residues around the selected network while constraining the network residues (via fixing or strong biasing), (5) validating designs through structure prediction (ESMFold/AlphaFold) and filtering based on confidence metrics (pLDDT), (6) explaining conceptual understanding of why Histidine is chosen (pKa ~6.0) and why networks must be buried (pKa shift), and (7) discussing biological applications (endosomal release, biosensing). Full credit is awarded for using justified alternative methods.
 
 Criteria (8):
 
@@ -14,43 +14,43 @@ Criteria (8):
 
       [C] (0 points): Does not calculate SASA, identifies surface residues as core positions, or does not address core residue identification.
 
-  Criterion 2: HBNet Network Discovery
-    Description: Evaluates discovery of His-containing hydrogen bond networks using Pyrosetta HBNet or equivalent alternative methods when PyRosetta is unavailable.
+  Criterion 2: Network Position Discovery
+    Description: Evaluates discovery of His-containing hydrogen bond network positions using PyRosetta HBNet or geometric analysis methods.
     Max Points: 20
     Levels:
-      [A] (20 points): Uses PyRosetta HBNet by setting up PyRosetta pose from 5L33 PDB structure, configuring and applying HBNet mover to search within core positions for His-His, His-Arg, His-Lys pairs/networks, and extracting discovered networks from HBNet output. OR when PyRosetta is unavailable (not installed or license unavailable), uses a justified alternative geometric analysis method (distance and angle calculations based on literature values, e.g., Cb-Cb distances 5.5-8.5 Å for His-His pairs) to search for and identify His-containing networks (His-His, His-Arg, His-Lys) within core residues.
+      [A] (20 points): Uses PyRosetta HBNet to search within core positions for His-His, His-Arg, His-Lys pairs/networks, OR uses geometric analysis methods with justified distance/angle criteria (e.g., Cβ-Cβ distances 5.5-8.5 Å for His-His pairs, 6.0-10.0 Å for His-Arg/His-Lys pairs based on literature values) to identify suitable positions for His-containing networks within core residues. Either approach is equally valid.
 
-      [B] (10 points): Uses PyRosetta HBNet but searches all residues instead of restricting to core positions, extracts network information incorrectly, or does not verify networks are in core positions. OR uses alternative geometric method but with poorly justified distance/angle criteria or without restricting search to core residues.
+      [B] (10 points): Uses HBNet or geometric methods but searches all residues instead of restricting to core positions, extracts network information incorrectly, does not verify networks are in core positions, or uses poorly justified distance/angle criteria.
 
-      [C] (0 points): Searches for wrong network types (not His-His, His-Arg, His-Lys), uses completely arbitrary criteria without justification, or does not discover any networks.
+      [C] (0 points): Searches for wrong network types (not His-His, His-Arg, His-Lys), uses completely arbitrary criteria without any justification, or does not discover any network positions.
 
-  Criterion 3: Histidine H-Bond Energy Filtering (Optional without PyRosetta)
-    Description: Evaluates filtering of networks based on primary histidine hydrogen bond energy. This criterion is optional when PyRosetta is unavailable—full credit is awarded if PyRosetta is unavailable and the agent uses justified geometric criteria or skips energy filtering with clear justification.
+  Criterion 3: Network Quality Filtering/Scoring
+    Description: Evaluates filtering or scoring of candidate networks to select favorable positions. Multiple approaches are acceptable as long as the method is justified.
     Max Points: 9
     Levels:
-      [A] (9 points): Uses PyRosetta’s HBondSet or Rosetta’s H-bond energy calculator to identify and score H-bonds involving Histidine ND1/NE2 atoms, retaining networks only if a primary His H-bond has an energy below –0.5 kcal/mol. OR when PyRosetta is unavailable, uses justified geometric criteria (e.g., donor-acceptor distances < 3.5 Å, appropriate angles) to filter for favorable H-bond geometry, OR skips energy-based filtering with clear justification that PyRosetta is required for accurate energy calculations.
+      [A] (9 points): Applies a justified quality control method to filter or rank candidate networks. Acceptable approaches include: (1) PyRosetta HBondSet or Rosetta energy calculator with appropriate threshold (e.g., H-bond energy < -0.5 kcal/mol), (2) geometric scoring based on distance from optimal values or favorable H-bond geometry criteria (e.g., donor-acceptor distances, angles), (3) selecting the best-scoring candidate based on a justified metric, or (4) providing clear justification for the selection criteria used. The key requirement is that the filtering/scoring approach is reasonable and justified.
 
-      [B] (5 points): Uses PyRosetta HBondSet but applies incorrect threshold (wrong sign like > -0.5, or magnitude like < -5.0), measures H-bonds involving wrong atoms (not His ND1/NE2), or filters non-primary histidine H-bonds. OR uses geometric filtering but with poorly justified criteria.
+      [B] (5 points): Applies filtering or scoring but with poorly justified criteria, uses incorrect thresholds (e.g., wrong sign or unreasonable magnitude), or selects networks without clear rationale.
 
-      [C] (0 points): PyRosetta is available but energy filtering is not performed without justification, uses completely wrong metric for filtering, or applies filtering that would reject all valid networks.
+      [C] (0 points): Does not apply any quality control, filtering, or scoring to candidate networks, uses completely wrong metrics, or applies criteria that would reject all valid networks.
 
   Criterion 4: ProteinMPNN Sequence Design
     Description: Evaluates redesign of environmental residues around the network using ProteinMPNN.
     Max Points: 17
     Levels:
-      [A] (17 points): Uses ProteinMPNN (or equivalent inverse folding tool) with scaffold structure as input, fixes the identity of network residues (forcing His, Arg, or Lys at network positions), allows surrounding environmental residues to mutate, and generates multiple sequence candidates (at least 5-20 sequences).
+      [A] (17 points): Uses ProteinMPNN (or equivalent inverse folding tool) with scaffold structure as input, constrains the identity of network residues to maintain His, Arg, or Lys at network positions (either by fixing residue identity OR by applying strong positive bias via bias_AA_per_residue), allows surrounding environmental residues to be redesigned, and generates at least one sequence candidate. Generating additional sequences is encouraged but not required for full credit.
 
-      [B] (14 points): Uses ProteinMPNN but generates only a single sequence, or manually mutates only network residues without using inverse folding tool for repacking environmental residues, or uses structure-based design but does not fix network residue identities.
+      [B] (14 points): Uses ProteinMPNN but does not constrain network residue identities (no fixing or biasing), manually mutates only network residues without using inverse folding tool for repacking environmental residues, or uses weak constraints that frequently fail to maintain network residues.
 
-      [C] (0 points): Does not perform sequence design, or designs sequences but allows network residues to mutate away from required identities (His, Arg, Lys).
+      [C] (0 points): Does not perform sequence design, or designs sequences that allow network residues to mutate away from required identities (His, Arg, Lys) without any attempt to constrain them.
 
   Criterion 5: Structure Prediction
     Description: Evaluates validation of designed sequences using structure prediction.
     Max Points: 13
     Levels:
-      [A] (13 points): Uses a high-accuracy structure prediction tool (ESMFold, AlphaFold2, Boltz-2, Chai-1, or equivalent) to predict structures for multiple design candidates (at least 3-5 sequences).
+      [A] (13 points): Uses a high-accuracy structure prediction tool (ESMFold, AlphaFold2, Boltz-2, Chai-1, or equivalent) to predict structures for at least one designed sequence. Predicting structures for additional sequences is encouraged but not required for full credit.
 
-      [B] (6 points): Uses high-accuracy prediction tool (ESMFold, AlphaFold2, Boltz-2, Chai-1, or equivalent) but predicts only a single structure, or uses low-accuracy prediction method.
+      [B] (6 points): Uses a low-accuracy prediction method, or attempts structure prediction but fails to obtain valid results.
 
       [C] (0 points): Does not perform structure prediction, uses completely wrong prediction method, or does not address structural validation.
 
@@ -58,11 +58,11 @@ Criteria (8):
     Description: Evaluates filtering of predicted structures based on confidence metrics.
     Max Points: 5
     Levels:
-      [A] (5 points): Calculates mean pLDDT scores for each predicted structure and applies appropriate confidence threshold (mean pLDDT > 80 for AlphaFold/ESMFold, or pLDDT > 0.8 for Boltz-2) to select only high-confidence predictions.
+      [A] (5 points): Calculates mean pLDDT scores for each predicted structure and applies appropriate confidence threshold (mean pLDDT > 70-90 for AlphaFold/ESMFold, or pLDDT > 0.7-0.9 for Boltz-2) to assess prediction quality. The specific threshold should be reasonable for the tool used.
 
-      [B] (2 points): Calculates confidence metrics but uses unreasonable threshold (e.g., pLDDT > 50 which is too loose, or pLDDT > 95 which is too strict), or applies AlphaFold/ESMFold threshold to Boltz-2 which uses 0-1 scale.
+      [B] (2 points): Calculates confidence metrics but uses unreasonable threshold (e.g., pLDDT > 50 which is too loose, or pLDDT > 98 which is too strict), or applies wrong scale for the tool used.
 
-      [C] (0 points): Does not calculate confidence metrics (pLDDT), does not filter predictions, uses completely wrong metric, or does not address confidence-based filtering.
+      [C] (0 points): Does not calculate confidence metrics (pLDDT), does not filter or assess predictions, uses completely wrong metric, or does not address confidence-based quality control.
 
   Criterion 7: Conceptual Understanding - Why Histidine and Why Buried Networks
     Description: Evaluates understanding of key conceptual principles: why histidine is chosen for pH sensing and why networks must be buried.
@@ -78,7 +78,7 @@ Criteria (8):
     Description: Evaluates complete workflow execution and understanding of pH-sensitive mechanism and biological applications.
     Max Points: 11
     Levels:
-      [A] (11 points): Executes all workflow steps in correct order (core identification → HBNet → filtering → design → prediction → validation), explains the pH-sensitive mechanism (buried His pKa shift, H-bond disruption upon protonation at low pH ~6.0, core destabilization leading to unfolding), predicts the effect (destabilization of the core leading to unfolding or conformational change), and discusses potential applications (e.g., endosomal release, biosensing).
+      [A] (11 points): Executes all workflow steps in correct order (core identification → network discovery → filtering/scoring → design → prediction → validation), explains the pH-sensitive mechanism (buried His pKa shift, H-bond disruption upon protonation at low pH ~6.0, core destabilization leading to unfolding), predicts the effect (destabilization of the core leading to unfolding or conformational change), and discusses potential applications (e.g., endosomal release, biosensing).
 
       [B] (5 points): Executes workflow steps but some steps are missing or out of order, provides generic explanation of pH sensitivity without specific mechanism details (e.g., mentions "pH affects protein" without pKa shift), or discusses mechanism but does not connect design to biological function or applications.
 
