@@ -20,14 +20,16 @@ if [ "$1" = "all" ]; then
     MODELS=("gpt-4o" "o3" "gpt-5")
     DIFFS=("easy" "medium" "hard")
     MAX_JOBS="${2:-4}"
+    SUBMISSION_ID="$(date +%m%d%H%M%S)"
     
     echo "Running $((${#MODELS[@]} * ${#DIFFS[@]})) benchmarks (max $MAX_JOBS parallel)"
+    echo "Submission ID: $SUBMISSION_ID"
     
     for model in "${MODELS[@]}"; do
         for diff in "${DIFFS[@]}"; do
             while [ $(jobs -r | wc -l) -ge $MAX_JOBS ]; do sleep 1; done
             
-            run="${model}_${diff}_$(date +%m%d%H%M)"
+            run="${model}_${diff}_${SUBMISSION_ID}"
             logdir="$TASK/agent_output/$run"
             mkdir -p "$logdir"
             
