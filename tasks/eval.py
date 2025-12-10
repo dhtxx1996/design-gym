@@ -5,10 +5,12 @@ Evaluate agent outputs against a rubric.
 Usage:
     python eval.py --task ph_sensitive_design --k 3
     python eval.py --task ph_sensitive_design --outputs run1 run2 --k 3
+    python eval.py --task ph_sensitive_design --k 5 --parallel  # Parallel across outputs
 """
 
 import re
 import json
+import asyncio
 import argparse
 from pathlib import Path
 import statistics
@@ -16,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 
 load_dotenv()
 load_dotenv(Path(__file__).parent / ".env")
@@ -25,36 +27,6 @@ load_dotenv(Path(__file__).parent / ".env")
 # ============================================================================
 # Tool Failure Analysis
 # ============================================================================
-
-# Patterns indicating service unavailability (uncontrollable failures)
-SERVICE_UNAVAILABLE_PATTERNS = [
-    r"connection\s*(refused|reset|timed?\s*out)",
-    r"(502|503|504)\s*(bad gateway|service unavailable|gateway timeout)",
-    r"service\s*(unavailable|temporarily\s*unavailable)",
-    r"api\s*(error|unavailable|rate\s*limit)",
-    r"timeout\s*(error|exceeded)",
-    r"network\s*(error|unreachable)",
-    r"server\s*(error|unavailable|down)",
-    r"quota\s*(exceeded|limit)",
-    r"resource\s*exhausted",
-    r"internal\s*server\s*error",
-    r"ECONNREFUSED",
-    r"ETIMEDOUT",
-    r"ENOTFOUND",
-]
-
-# Patterns indicating tool usage/understanding errors
-USAGE_ERROR_PATTERNS = [
-    r"(invalid|missing|required)\s*(argument|parameter|field)",
-    r"(type|validation)\s*error",
-    r"(unexpected|unknown)\s*(argument|parameter|key)",
-    r"ImportError|ModuleNotFoundError",
-    r"(syntax|name|attribute)\s*error",
-    r"KeyError|IndexError|TypeError",
-    r"(file|path)\s*not\s*found",
-    r"permission\s*denied",
-    r"invalid\s*(input|format|syntax)",
-]
 
 
 @dataclass
@@ -73,17 +45,12 @@ class ToolFailureAnalysis:
     """Analysis of tool failures in an agent run."""
     total_tool_calls: int = 0
     successful_calls: int = 0
-    failed_calls: int = 0
+    failed_calls: int = 0  # Any tool call that returned an error/traceback
     
-    # Categorized failures
-    service_failures: list = field(default_factory=list)  # Uncontrollable
+    # Categorized failures (telemetry only; the LLM acts as execution judge)
+    service_failures: list = field(default_factory=list)  # Potentially uncontrollable
     usage_failures: list = field(default_factory=list)    # Agent misunderstanding
     recovered_failures: list = field(default_factory=list)  # Failed then succeeded
-    
-    # Summary flags
-    has_uncontrollable_failures: bool = False
-    should_skip_eval: bool = False
-    skip_reason: Optional[str] = None
     
     def to_dict(self) -> dict:
         return {
@@ -93,27 +60,7 @@ class ToolFailureAnalysis:
             "service_failures": len(self.service_failures),
             "usage_failures": len(self.usage_failures),
             "recovered_failures": len(self.recovered_failures),
-            "has_uncontrollable_failures": self.has_uncontrollable_failures,
-            "should_skip_eval": self.should_skip_eval,
-            "skip_reason": self.skip_reason,
         }
-
-
-def classify_error(error_content: str) -> str:
-    """Classify an error as 'service', 'usage', or 'unknown'."""
-    error_lower = error_content.lower()
-    
-    # Check for service unavailability first (higher priority)
-    for pattern in SERVICE_UNAVAILABLE_PATTERNS:
-        if re.search(pattern, error_lower, re.IGNORECASE):
-            return "service"
-    
-    # Check for usage/understanding errors
-    for pattern in USAGE_ERROR_PATTERNS:
-        if re.search(pattern, error_content, re.IGNORECASE):
-            return "usage"
-    
-    return "unknown"
 
 
 def analyze_tool_failures(agent_log_path: Path) -> ToolFailureAnalysis:
@@ -175,65 +122,43 @@ def analyze_tool_failures(agent_log_path: Path) -> ToolFailureAnalysis:
         
         if is_error:
             tc.is_error = True
-            tc.error_type = classify_error(result)
             analysis.failed_calls += 1
-            
-            if tc.error_type == "service":
-                analysis.service_failures.append({
-                    "tool": tc.tool_name,
-                    "call_id": call_id,
-                    "error_snippet": result[:500]
-                })
-            elif tc.error_type == "usage":
-                analysis.usage_failures.append({
-                    "tool": tc.tool_name,
-                    "call_id": call_id,
-                    "arguments": tc.arguments,
-                    "error_snippet": result[:500]
-                })
+            # Record generic failure telemetry; the execution judge (LLM)
+            # will interpret whether this reflects service issues, usage
+            # errors, or other problems based on the raw error text.
+            analysis.usage_failures.append({
+                "tool": tc.tool_name,
+                "call_id": call_id,
+                "arguments": tc.arguments,
+                "error_snippet": result[:500],
+            })
         else:
             analysis.successful_calls += 1
         
         # Track history for recovery detection
         if tc.tool_name not in tool_history:
             tool_history[tc.tool_name] = []
-        tool_history[tc.tool_name].append((call_id, not is_error, tc.error_type))
+        tool_history[tc.tool_name].append((call_id, not is_error))
     
-    # Detect recoveries: tool failed (usage error) then succeeded
+    # Detect recoveries: tool failed (usage error) then succeeded.
+    # This is purely informational telemetry; the execution judge (LLM)
+    # decides how to treat these in scoring / force majeure.
     for tool_name, history in tool_history.items():
-        had_usage_failure = False
-        for i, (call_id, success, error_type) in enumerate(history):
-            if not success and error_type == "usage":
-                had_usage_failure = True
-            elif success and had_usage_failure:
-                # Found a recovery!
-                analysis.recovered_failures.append({
-                    "tool": tool_name,
-                    "description": f"Agent initially failed to use {tool_name} but eventually succeeded"
-                })
-                had_usage_failure = False  # Reset for next potential recovery
-    
-    # Determine if we should skip evaluation
-    if analysis.service_failures:
-        # Check if service failures are significant (>30% of calls or critical tools failed)
-        service_failure_rate = len(analysis.service_failures) / max(analysis.total_tool_calls, 1)
-        
-        # Critical tools that if unavailable, should skip eval
-        critical_tools = {"tamarind_submit_job", "tamarind_poll_results", "run_python", "esmfold", "proteinmpnn"}
-        critical_service_failures = [
-            f for f in analysis.service_failures 
-            if any(ct in f["tool"].lower() for ct in critical_tools)
-        ]
-        
-        if service_failure_rate > 0.3 or critical_service_failures:
-            analysis.has_uncontrollable_failures = True
-            analysis.should_skip_eval = True
-            analysis.skip_reason = (
-                f"Service unavailability detected: {len(analysis.service_failures)} service failures "
-                f"out of {analysis.total_tool_calls} total calls. "
-                f"Critical tools affected: {[f['tool'] for f in critical_service_failures]}"
-            )
-    
+        had_failure = False
+        for i, (call_id, success) in enumerate(history):
+            if not success:
+                had_failure = True
+            elif success and had_failure:
+                # Found a recovery: at least one earlier failure for this tool
+                # followed by a success.
+                analysis.recovered_failures.append(
+                    {
+                        "tool": tool_name,
+                        "description": f"Agent initially failed to use {tool_name} but eventually succeeded",
+                    }
+                )
+                had_failure = False  # Reset for next potential recovery
+
     return analysis
 
 
@@ -291,7 +216,7 @@ def load_outputs(output_dir: Path) -> dict:
 
 
 def build_failure_context(analysis: ToolFailureAnalysis) -> str:
-    """Build context string for the evaluator about tool failures."""
+    """Build context string for the evaluator about tool failures and execution."""
     if analysis.total_tool_calls == 0:
         return ""
     
@@ -304,9 +229,9 @@ def build_failure_context(analysis: ToolFailureAnalysis) -> str:
             lines.append(f"  - {rf['tool']}: {rf['description']}")
         lines.append("")
     
-    # Service failures - uncontrollable
+    # Service failures - potentially uncontrollable (external)
     if analysis.service_failures:
-        lines.append("SERVICE UNAVAILABILITY (do NOT penalize - external service issues):")
+        lines.append("SERVICE-LIKE FAILURES (may indicate external service issues):")
         for sf in analysis.service_failures:
             lines.append(f"  - {sf['tool']}: Service was unavailable/unreachable")
         lines.append("")
@@ -322,15 +247,15 @@ def build_failure_context(analysis: ToolFailureAnalysis) -> str:
             lines.append(f"  - {uf['tool']}: Agent misunderstood tool usage and did not recover")
         lines.append("")
     
-    # Summary stats
+    # Summary stats (telemetry for the execution judge)
     lines.append(f"TOOL CALL SUMMARY: {analysis.successful_calls}/{analysis.total_tool_calls} successful")
     
     return "\n".join(lines)
 
 
-def evaluate_once(task_dir: Path, output_dir: Path, client: OpenAI, model: str, 
-                  categories: dict, failure_analysis: Optional[ToolFailureAnalysis] = None) -> dict:
-    """Single evaluation round."""
+def _build_eval_prompt(task_dir: Path, output_dir: Path, categories: dict, 
+                       failure_analysis: Optional[ToolFailureAnalysis] = None) -> tuple[str, int]:
+    """Build the evaluation prompt. Returns (prompt, total_max_points)."""
     rubric_text, _ = parse_rubric(task_dir / "rubric.txt")
     question = (task_dir / "question.md").read_text()[:3000] if (task_dir / "question.md").exists() else ""
     outputs = load_outputs(output_dir)
@@ -346,7 +271,7 @@ def evaluate_once(task_dir: Path, output_dir: Path, client: OpenAI, model: str,
         category_format = '"overall": {"score": <0-100>, "reasoning": "<explanation>"}'
         total_max = 100
     
-    # Build failure context if available
+    # Build execution/failure context if available
     failure_context = ""
     if failure_analysis:
         failure_context = build_failure_context(failure_analysis)
@@ -369,24 +294,38 @@ FILES PRODUCED:
 FILE CONTENTS:
 {json.dumps({k: v for k, v in outputs.items() if k not in ['path', 'files']}, indent=2, default=str)[:5000]}
 {failure_context}
-EVALUATION GUIDELINES FOR TOOL FAILURES:
-1. SERVICE UNAVAILABILITY: If a tool/service was unavailable (API down, timeout, connection refused), 
-   do NOT penalize the agent. These are external factors beyond the agent's control.
-2. RECOVERED ERRORS: If the agent initially misunderstood a tool but eventually figured it out and 
+EVALUATION GUIDELINES FOR TOOL FAILURES AND EXECUTION CONDITIONS:
+1. Use the TOOL FAILURE ANALYSIS section as factual telemetry about tool usage and errors.
+2. If tools/services were clearly unavailable (e.g., repeated network/HTTP 5xx errors), do NOT penalize
+   the agent for those "force majeure" conditions.
+3. RECOVERED ERRORS: If the agent initially misunderstood a tool but eventually figured it out and 
    succeeded, do NOT penalize for the initial failures. Learning and recovery is expected behavior.
-3. PERSISTENT MISUSE: If the agent consistently failed to use a tool correctly despite multiple 
+4. PERSISTENT MISUSE: If the agent consistently failed to use a tool correctly despite multiple 
    attempts (and never recovered), this MAY factor into the evaluation - but focus on whether the 
    agent achieved the task goals through alternative means.
-4. FOCUS ON OUTCOMES: Primarily evaluate based on the final outputs and whether the task objectives 
+5. FOCUS ON OUTCOMES: Primarily evaluate based on the final outputs and whether the task objectives 
    were achieved, not on the number of failed attempts along the way.
 
 Score each rubric category based on the agent's outputs. For EACH category, provide:
 - score: the numeric score (0 to max points for that category)
 - reasoning: a specific explanation of why this score was given, referencing the agent's outputs
 
-Return JSON only:
-{{{category_format}, "total": <0-{total_max}>}}"""
+Additionally, act as an EXECUTION JUDGE and report:
+- execution_ok: true if the execution environment and tools were sufficiently functional to fairly judge the agent
+- force_majeure: true if external factors (service outages, broken environment, etc.) substantially blocked the agent
+- force_majeure_reason: a short explanation if force_majeure is true
 
+Return JSON only:
+{{{category_format}, "total": <0-{total_max}>, "execution_ok": <true/false>, "force_majeure": <true/false>, "force_majeure_reason": "<short explanation>"}}"""
+    
+    return prompt, total_max
+
+
+def evaluate_once(task_dir: Path, output_dir: Path, client: OpenAI, model: str, 
+                  categories: dict, failure_analysis: Optional[ToolFailureAnalysis] = None) -> dict:
+    """Single evaluation round (synchronous)."""
+    prompt, _ = _build_eval_prompt(task_dir, output_dir, categories, failure_analysis)
+    
     response = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
@@ -399,8 +338,178 @@ Return JSON only:
         return {"total": 0, "error": "Parse failed"}
 
 
+async def evaluate_once_async(task_dir: Path, output_dir: Path, client: AsyncOpenAI, model: str, 
+                              categories: dict, failure_analysis: Optional[ToolFailureAnalysis] = None,
+                              round_num: int = 0) -> dict:
+    """Single evaluation round (async)."""
+    prompt, _ = _build_eval_prompt(task_dir, output_dir, categories, failure_analysis)
+    
+    try:
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        result = json.loads(response.choices[0].message.content)
+        result["_round"] = round_num
+        return result
+    except Exception as e:
+        return {"total": 0, "error": f"Failed: {e}", "_round": round_num}
+
+
+def _aggregate_results(all_results: list[dict], categories: dict, 
+                       failure_analysis: ToolFailureAnalysis) -> dict:
+    """Aggregate results from multiple evaluation rounds."""
+    scores = [r.get("total", 0) for r in all_results]
+    
+    # Average each category - handles {"score": X, "reasoning": "..."} format
+    category_scores = {}
+    for cat in categories:
+        cat_data = [r.get(cat, {}) for r in all_results]
+        cat_scores = [
+            d.get("score", d) if isinstance(d, dict) else d 
+            for d in cat_data
+        ]
+        cat_reasoning = [
+            d.get("reasoning", "") if isinstance(d, dict) else ""
+            for d in cat_data
+        ]
+        category_scores[cat] = {
+            "mean": statistics.mean(cat_scores),
+            "scores": cat_scores,
+            "reasoning": cat_reasoning
+        }
+    
+    # Aggregate execution judge signals
+    exec_ok_votes = sum(
+        1 for r in all_results
+        if isinstance(r.get("execution_ok"), bool) and r.get("execution_ok")
+    )
+    force_majeure_votes = sum(
+        1 for r in all_results
+        if isinstance(r.get("force_majeure"), bool) and r.get("force_majeure")
+    )
+    num_judges = len(all_results)
+    exec_ok = exec_ok_votes / max(num_judges, 1) >= 0.5 if num_judges else True
+    force_majeure = force_majeure_votes / max(num_judges, 1) >= 0.5 if num_judges else False
+    fm_reasons = [
+        (r.get("force_majeure_reason") or "").strip()
+        for r in all_results
+        if isinstance(r.get("force_majeure_reason"), str) and (r.get("force_majeure_reason") or "").strip()
+    ]
+    seen = set()
+    unique_reasons = []
+    for reason in fm_reasons:
+        if reason not in seen:
+            seen.add(reason)
+            unique_reasons.append(reason)
+    force_majeure_reason = "; ".join(unique_reasons)[:500] if unique_reasons else None
+
+    failure_dict = failure_analysis.to_dict()
+    failure_dict.update({
+        "execution_judges": num_judges,
+        "execution_ok_votes": exec_ok_votes,
+        "execution_ok": exec_ok,
+        "force_majeure_judges": num_judges,
+        "force_majeure_votes": force_majeure_votes,
+        "force_majeure": force_majeure,
+        "force_majeure_reason": force_majeure_reason,
+    })
+
+    return {
+        "scores": scores,
+        "mean": statistics.mean(scores),
+        "std": statistics.stdev(scores) if len(scores) > 1 else 0,
+        "breakdown": category_scores,
+        "skipped": False,
+        "failure_analysis": failure_dict,
+    }
+
+
+async def evaluate_output_async(task_dir: Path, output_dir: Path, client: AsyncOpenAI, 
+                                 model: str, categories: dict, k: int) -> tuple[str, dict]:
+    """Evaluate a single output directory with k parallel rounds."""
+    if not output_dir.exists() or not output_dir.is_dir():
+        return output_dir.name, None
+    
+    # Analyze tool failures
+    agent_log_path = output_dir / "agent_log.json"
+    failure_analysis = analyze_tool_failures(agent_log_path)
+    
+    # Run k evaluation rounds in parallel
+    tasks = [
+        evaluate_once_async(task_dir, output_dir, client, model, categories, failure_analysis, i+1)
+        for i in range(k)
+    ]
+    all_results = await asyncio.gather(*tasks)
+    
+    # Print results as they complete
+    scores = [r.get("total", 0) for r in all_results]
+    print(f"  {output_dir.name}: {scores} (mean: {statistics.mean(scores):.1f})")
+    
+    return output_dir.name, _aggregate_results(all_results, categories, failure_analysis)
+
+
+async def evaluate_async(task: str, output_dirs: list[Path], k: int, eval_model: str, 
+                         parallel_outputs: bool = False) -> tuple[dict, dict]:
+    """Evaluate outputs with async parallelization.
+    
+    Args:
+        task: Task name
+        output_dirs: List of output directories to evaluate
+        k: Number of evaluation rounds per output
+        eval_model: Model to use for evaluation
+        parallel_outputs: If True, evaluate multiple outputs in parallel.
+                         If False, only parallelize the k rounds within each output.
+    """
+    client = AsyncOpenAI()
+    task_dir = Path(__file__).parent / task
+    _, categories = parse_rubric(task_dir / "rubric.txt")
+    
+    valid_dirs = [d for d in output_dirs if d.exists() and d.is_dir()]
+    
+    if parallel_outputs:
+        # Parallel across all outputs AND all k rounds
+        print(f"Running {len(valid_dirs)} outputs × {k} rounds in parallel...")
+        tasks = [
+            evaluate_output_async(task_dir, output_dir, client, eval_model, categories, k)
+            for output_dir in valid_dirs
+        ]
+        results_list = await asyncio.gather(*tasks)
+        results = {name: result for name, result in results_list if result is not None}
+    else:
+        # Sequential across outputs, parallel within each output's k rounds
+        results = {}
+        for output_dir in valid_dirs:
+            print(f"\n{output_dir.name}")
+            
+            # Analyze tool failures
+            agent_log_path = output_dir / "agent_log.json"
+            failure_analysis = analyze_tool_failures(agent_log_path)
+            
+            if failure_analysis.total_tool_calls > 0:
+                print(f"  Tool calls: {failure_analysis.successful_calls}/{failure_analysis.total_tool_calls} successful")
+            
+            # Run k rounds in parallel
+            tasks = [
+                evaluate_once_async(task_dir, output_dir, client, eval_model, categories, failure_analysis, i+1)
+                for i in range(k)
+            ]
+            print(f"  Running {k} evaluation rounds in parallel...")
+            all_results = await asyncio.gather(*tasks)
+            
+            # Sort by round number and print
+            all_results_sorted = sorted(all_results, key=lambda r: r.get("_round", 0))
+            for r in all_results_sorted:
+                print(f"    Round {r.get('_round', '?')}: {r.get('total', 0)}")
+            
+            results[output_dir.name] = _aggregate_results(all_results, categories, failure_analysis)
+    
+    return results, categories
+
+
 def evaluate(task: str, output_dirs: list[Path], k: int, eval_model: str) -> dict:
-    """Evaluate outputs k times."""
+    """Evaluate outputs k times (synchronous version for backwards compatibility)."""
     client = OpenAI()
     task_dir = Path(__file__).parent / task
     _, categories = parse_rubric(task_dir / "rubric.txt")
@@ -411,18 +520,15 @@ def evaluate(task: str, output_dirs: list[Path], k: int, eval_model: str) -> dic
             print(f"Skip: {output_dir} not found")
             continue
         
-        # Skip non-directories (e.g., .DS_Store)
         if not output_dir.is_dir():
             print(f"Skip: {output_dir} is not a directory")
             continue
         
         print(f"\n{output_dir.name}")
         
-        # Analyze tool failures from agent log
         agent_log_path = output_dir / "agent_log.json"
         failure_analysis = analyze_tool_failures(agent_log_path)
         
-        # Print failure analysis summary
         if failure_analysis.total_tool_calls > 0:
             print(f"  Tool calls: {failure_analysis.successful_calls}/{failure_analysis.total_tool_calls} successful")
             if failure_analysis.service_failures:
@@ -434,21 +540,6 @@ def evaluate(task: str, output_dirs: list[Path], k: int, eval_model: str) -> dic
                 if unrecovered > 0:
                     print(f"  ✗  Unrecovered usage errors: {unrecovered}")
         
-        # Check if we should skip evaluation due to service unavailability
-        if failure_analysis.should_skip_eval:
-            print(f"  ⛔ SKIPPING EVALUATION: {failure_analysis.skip_reason}")
-            results[output_dir.name] = {
-                "scores": [],
-                "mean": None,
-                "std": None,
-                "breakdown": {},
-                "reasoning": [],
-                "skipped": True,
-                "skip_reason": failure_analysis.skip_reason,
-                "failure_analysis": failure_analysis.to_dict(),
-            }
-            continue
-        
         scores = []
         all_results = []
         
@@ -459,34 +550,7 @@ def evaluate(task: str, output_dirs: list[Path], k: int, eval_model: str) -> dic
             scores.append(score)
             print(f"  Round {i+1}: {score}")
         
-        # Average each category - now handles {"score": X, "reasoning": "..."} format
-        category_scores = {}
-        for cat in categories:
-            # Extract scores and reasoning from each round
-            cat_data = [r.get(cat, {}) for r in all_results]
-            # Handle both old format (just number) and new format ({"score": X, "reasoning": "..."})
-            cat_scores = [
-                d.get("score", d) if isinstance(d, dict) else d 
-                for d in cat_data
-            ]
-            cat_reasoning = [
-                d.get("reasoning", "") if isinstance(d, dict) else ""
-                for d in cat_data
-            ]
-            category_scores[cat] = {
-                "mean": statistics.mean(cat_scores),
-                "scores": cat_scores,
-                "reasoning": cat_reasoning  # Per-category reasoning for each round
-            }
-        
-        results[output_dir.name] = {
-            "scores": scores,
-            "mean": statistics.mean(scores),
-            "std": statistics.stdev(scores) if len(scores) > 1 else 0,
-            "breakdown": category_scores,
-            "skipped": False,
-            "failure_analysis": failure_analysis.to_dict(),
-        }
+        results[output_dir.name] = _aggregate_results(all_results, categories, failure_analysis)
     
     return results, categories
 
@@ -536,6 +600,10 @@ def main():
     parser.add_argument("--k", type=int, default=3, help="Evaluation rounds")
     parser.add_argument("--model", default="gpt-4o", help="Evaluator model")
     parser.add_argument("--output", default="eval_results", help="Output prefix")
+    parser.add_argument("--parallel", action="store_true", 
+                        help="Parallelize across outputs (default: only parallelize k rounds per output)")
+    parser.add_argument("--sync", action="store_true",
+                        help="Use synchronous evaluation (no parallelization, for debugging)")
     
     args = parser.parse_args()
     task_dir = Path(__file__).parent / args.task
@@ -552,7 +620,15 @@ def main():
     
     print(f"Evaluating {len(output_dirs)} outputs ({args.k} rounds each)")
     
-    results, categories = evaluate(args.task, output_dirs, args.k, args.model)
+    if args.sync:
+        print("Using synchronous evaluation (no parallelization)")
+        results, categories = evaluate(args.task, output_dirs, args.k, args.model)
+    else:
+        mode = "fully parallel" if args.parallel else "parallel k rounds per output"
+        print(f"Using async evaluation ({mode})")
+        results, categories = asyncio.run(
+            evaluate_async(args.task, output_dirs, args.k, args.model, args.parallel)
+        )
     
     # Save
     with open(task_dir / f"{args.output}.json", "w") as f:
