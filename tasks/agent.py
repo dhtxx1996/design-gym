@@ -30,6 +30,7 @@ load_dotenv(Path(__file__).parent / ".env")
 # Add current directory for imports
 sys.path.insert(0, str(Path(__file__).parent))
 from tamarind_client import TamarindClient
+from dag_tracker import DAGTracker
 
 
 # =============================================================================
@@ -205,7 +206,7 @@ TOOLS = [
                 "required": ["summary"]
             }
         }
-    }
+    },
 ]
 
 
@@ -226,6 +227,9 @@ class AgentTools:
         # Track agent execution metadata
         self.execution_start = datetime.now()
         self.tool_calls: list[dict] = []
+        
+        # DAG tracking for execution provenance
+        self.dag = DAGTracker()
         
     @property
     def tamarind(self) -> TamarindClient:
@@ -493,6 +497,129 @@ class AgentTools:
         except Exception as e:
             return f"Error polling results: {e}"
     
+    # =========================================================================
+    # Automatic DAG Tracking
+    # =========================================================================
+    
+    def _auto_track_tool(self, tool_name: str, arguments: dict, result: str) -> None:
+        """Automatically track tool call in the DAG."""
+        try:
+            # Generate unique function ID
+            func_count = len([n for n in self.dag.nodes.values() if n.type == "function"])
+            func_id = f"{tool_name}_{func_count + 1}"
+            
+            # Skip tracking for some meta tools
+            if tool_name in ("list_directory", "task_complete"):
+                return
+            
+            # Determine inputs and outputs based on tool type
+            inputs = []
+            outputs = []
+            
+            if tool_name == "read_file":
+                path = arguments.get("path", "file")
+                artifact_id = f"file:{path}"
+                if artifact_id not in self.dag.nodes:
+                    self.dag.add_artifact(path, artifact_id=artifact_id)
+                inputs.append(artifact_id)
+                
+            elif tool_name == "write_file":
+                path = arguments.get("path", "file")
+                artifact_id = f"file:{path}"
+                if artifact_id not in self.dag.nodes:
+                    self.dag.add_artifact(path, artifact_id=artifact_id)
+                outputs.append(artifact_id)
+                
+            elif tool_name == "run_python":
+                # Track code execution - look for file operations in code
+                code = arguments.get("code", "")
+                # Check for file writes in code
+                import re
+                writes = re.findall(r'\.write_text\(["\']([^"\']+)', code)
+                writes += re.findall(r'urlretrieve\([^,]+,\s*["\']([^"\']+)', code)
+                writes += re.findall(r'open\(["\']([^"\']+)["\'],\s*["\']w', code)
+                writes += re.findall(r'to_json\(["\']([^"\']+)', code)
+                writes += re.findall(r'json\.dump\([^,]+,\s*open\(["\']([^"\']+)', code)
+                for path in writes:
+                    artifact_id = f"file:{path}"
+                    if artifact_id not in self.dag.nodes:
+                        self.dag.add_artifact(path, artifact_id=artifact_id)
+                    outputs.append(artifact_id)
+                    
+            elif tool_name == "tamarind_upload_file":
+                path = arguments.get("filepath", "file")
+                artifact_id = f"file:{path}"
+                if artifact_id not in self.dag.nodes:
+                    self.dag.add_artifact(path, artifact_id=artifact_id)
+                inputs.append(artifact_id)
+                # Output is the uploaded reference
+                upload_id = f"tamarind:{path}"
+                self.dag.add_artifact(f"uploaded:{path}", artifact_id=upload_id)
+                outputs.append(upload_id)
+                
+            elif tool_name == "tamarind_submit_job":
+                tool = arguments.get("tool_name", "job")
+                func_id = f"{tool}_{func_count + 1}"
+                # Input is any uploaded file referenced
+                params = arguments.get("params", {})
+                for key, val in params.items():
+                    if isinstance(val, str) and val.endswith(('.pdb', '.fa', '.fasta', '.json')):
+                        upload_id = f"tamarind:{val}"
+                        if upload_id in self.dag.nodes:
+                            inputs.append(upload_id)
+                # Output is results
+                if "job_name" in result:
+                    result_id = f"results:{tool}"
+                    self.dag.add_artifact(f"{tool}_results", artifact_id=result_id)
+                    outputs.append(result_id)
+                    
+            elif tool_name == "tamarind_poll_results":
+                job_name = arguments.get("job_name", "")
+                tool = job_name.split("_")[0] if "_" in job_name else "job"
+                result_id = f"results:{tool}"
+                if result_id in self.dag.nodes:
+                    inputs.append(result_id)
+                # Downloaded files as outputs
+                if "downloaded_to" in result:
+                    dl_id = f"downloaded:{tool}"
+                    self.dag.add_artifact(f"{tool}_downloaded", artifact_id=dl_id)
+                    outputs.append(dl_id)
+            
+            # Add function node if we have any i/o
+            if inputs or outputs:
+                self.dag.add_function(tool_name, function_id=func_id)
+                for inp in inputs:
+                    try:
+                        self.dag.add_edge(inp, func_id)
+                    except:
+                        pass
+                for out in outputs:
+                    try:
+                        self.dag.add_edge(func_id, out)
+                    except:
+                        pass
+                        
+        except Exception as e:
+            # Don't fail the tool call if DAG tracking fails
+            print(f"[dag] Warning: tracking failed: {e}")
+    
+    def save_dag(self, path: Path = None) -> None:
+        """Save the DAG to JSON and generate visualization."""
+        if path is None:
+            path = self.output_dir
+        
+        # Save JSON
+        json_path = path / "execution_dag.json"
+        self.dag.save(json_path)
+        
+        # Save visualization
+        if self.dag.nodes:
+            try:
+                png_path = path / "execution_dag.png"
+                self.dag.visualize(output_path=png_path, title="Agent Execution DAG")
+            except Exception as e:
+                print(f"Warning: Could not generate DAG visualization: {e}")
+    
     def execute_tool(self, tool_name: str, arguments: dict) -> str:
         handlers = {
             "read_file": lambda: self.read_file(arguments["path"]),
@@ -506,7 +633,14 @@ class AgentTools:
             "tamarind_poll_results": lambda: self.tamarind_poll_results(arguments["job_name"]),
             "task_complete": lambda: f"TASK_COMPLETE: {arguments['summary']}",
         }
-        return handlers.get(tool_name, lambda: f"Unknown tool: {tool_name}")()
+        
+        # Execute the tool
+        result = handlers.get(tool_name, lambda: f"Unknown tool: {tool_name}")()
+        
+        # Auto-track in DAG (no LLM call needed)
+        self._auto_track_tool(tool_name, arguments, result)
+        
+        return result
     
     def _handle_tamarind_submit(self, arguments: dict) -> str:
         tool = arguments.get("tool_name")
@@ -679,6 +813,14 @@ Be methodical, save intermediate results, and try alternatives if something fail
     iteration = 0
     task_completed = False
     
+    # Track execution metrics
+    import time
+    start_time = time.time()
+    llm_calls = 0
+    total_prompt_tokens = 0
+    total_completion_tokens = 0
+    files_created = []
+    
     while iteration < max_iterations and not task_completed:
         iteration += 1
         print(f"\n--- Iteration {iteration}/{max_iterations} ---")
@@ -690,6 +832,12 @@ Be methodical, save intermediate results, and try alternatives if something fail
                 tools=TOOLS,
                 tool_choice="auto"
             )
+            
+            # Track LLM call metrics
+            llm_calls += 1
+            if response.usage:
+                total_prompt_tokens += response.usage.prompt_tokens
+                total_completion_tokens += response.usage.completion_tokens
             
             assistant_message = response.choices[0].message
             messages.append(assistant_message)
@@ -705,6 +853,10 @@ Be methodical, save intermediate results, and try alternatives if something fail
                     print(f"  Tool: {tool_name}")
                     if tool_name != "run_python":
                         print(f"  Args: {json.dumps(arguments, indent=2)[:200]}")
+                    
+                    # Track file creation
+                    if tool_name == "write_file" and "path" in arguments:
+                        files_created.append(arguments["path"])
                     
                     result = tools.execute_tool(tool_name, arguments)
                     
@@ -729,11 +881,21 @@ Be methodical, save intermediate results, and try alternatives if something fail
             traceback.print_exc()
             break
     
+    end_time = time.time()
+    execution_time_seconds = end_time - start_time
+    
     # Save conversation log
     log_path = output_dir / "agent_log.json"
     with open(log_path, "w") as f:
         log_data = [msg.model_dump() if hasattr(msg, "model_dump") else msg for msg in messages]
         json.dump(log_data, f, indent=2, default=str)
+    
+    # List all files actually created in output directory (excluding logs)
+    actual_files = [
+        str(f.relative_to(output_dir)) 
+        for f in output_dir.rglob("*") 
+        if f.is_file() and f.name not in ["agent_log.json", "session_info.json"]
+    ]
     
     # Save session metadata for provenance tracking
     session_info = tools.get_execution_summary()
@@ -741,23 +903,49 @@ Be methodical, save intermediate results, and try alternatives if something fail
     session_info["task_completed"] = task_completed
     session_info["model"] = model
     
+    # Add execution metrics
+    session_info["execution_metrics"] = {
+        "execution_time_seconds": round(execution_time_seconds, 2),
+        "execution_time_formatted": f"{int(execution_time_seconds // 60)}m {int(execution_time_seconds % 60)}s",
+        "llm_calls": llm_calls,
+        "total_prompt_tokens": total_prompt_tokens,
+        "total_completion_tokens": total_completion_tokens,
+        "total_tokens": total_prompt_tokens + total_completion_tokens,
+        "files_created": actual_files,
+        "files_created_count": len(actual_files),
+    }
+    
+    # Add DAG metadata
+    session_info["execution_dag"] = tools.dag.to_dict().get("metadata", {})
+    
     session_path = output_dir / "session_info.json"
     with open(session_path, "w") as f:
         json.dump(session_info, f, indent=2, default=str)
     
+    # Save execution DAG
+    tools.save_dag()
+    dag_stats = tools.dag.to_dict().get("metadata", {})
+    
     print(f"\n{'=' * 60}")
     print(f"Agent finished after {iteration} iterations")
+    print(f"Execution time: {session_info['execution_metrics']['execution_time_formatted']}")
+    print(f"LLM calls: {llm_calls}")
+    print(f"Tokens: {total_prompt_tokens:,} prompt + {total_completion_tokens:,} completion = {total_prompt_tokens + total_completion_tokens:,} total")
+    print(f"Files created: {len(actual_files)}")
     print(f"Session ID: {session_id}")
     tamarind_info = session_info.get('tamarind', {})
-    print(f"Files uploaded: {tamarind_info.get('file_count', 0)}")
-    print(f"Jobs submitted: {tamarind_info.get('job_count', 0)}")
+    print(f"Tamarind files uploaded: {tamarind_info.get('file_count', 0)}")
+    print(f"Tamarind jobs submitted: {tamarind_info.get('job_count', 0)}")
     if tamarind_info.get('files_uploaded'):
         print(f"  Files: {tamarind_info['files_uploaded']}")
     if tamarind_info.get('jobs_submitted'):
         print(f"  Jobs: {tamarind_info['jobs_submitted']}")
+    print(f"Execution DAG: {dag_stats.get('node_count', 0)} nodes, {dag_stats.get('edge_count', 0)} edges")
     print(f"Outputs saved to: {output_dir}")
     print(f"Conversation log: {log_path}")
     print(f"Session info: {session_path}")
+    if dag_stats.get('node_count', 0) > 0:
+        print(f"DAG visualization: {output_dir / 'execution_dag.png'}")
 
 
 def main():
