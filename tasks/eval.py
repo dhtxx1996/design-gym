@@ -600,6 +600,8 @@ def main():
     parser.add_argument("--k", type=int, default=3, help="Evaluation rounds")
     parser.add_argument("--model", default="gpt-4o", help="Evaluator model")
     parser.add_argument("--output", default="eval_results", help="Output prefix")
+    parser.add_argument("--output-dir", type=str, default=None,
+                        help="Custom directory to save output files (created if not exists). Default: task directory")
     parser.add_argument("--parallel", action="store_true", 
                         help="Parallelize across outputs (default: only parallelize k rounds per output)")
     parser.add_argument("--sync", action="store_true",
@@ -630,11 +632,22 @@ def main():
             evaluate_async(args.task, output_dirs, args.k, args.model, args.parallel)
         )
     
-    # Save
-    with open(task_dir / f"{args.output}.json", "w") as f:
-        json.dump({"categories": {k: v["max"] for k, v in categories.items()}, "results": results}, f, indent=2)
+    # Determine output directory
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Saving outputs to: {output_dir}")
+    else:
+        output_dir = task_dir
     
-    plot_results(results, str(task_dir / f"{args.output}.png"))
+    # Save
+    json_path = output_dir / f"{args.output}.json"
+    with open(json_path, "w") as f:
+        json.dump({"categories": {k: v["max"] for k, v in categories.items()}, "results": results}, f, indent=2)
+    print(f"Saved results: {json_path}")
+    
+    plot_path = output_dir / f"{args.output}.png"
+    plot_results(results, str(plot_path))
     
     # Summary
     cat_names = list(categories.keys())
