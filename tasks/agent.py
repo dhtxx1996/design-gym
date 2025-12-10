@@ -607,8 +607,14 @@ class AgentTools:
             # Don't fail the tool call if DAG tracking fails
             print(f"[dag] Warning: tracking failed: {e}")
     
-    def save_dag(self, path: Path = None) -> None:
-        """Save the DAG to JSON and generate visualization."""
+    def save_dag(self, path: Path = None, show_all_nodes: bool = False) -> None:
+        """Save the DAG to JSON and generate visualization.
+        
+        Args:
+            path: Output directory path (default: output_dir)
+            show_all_nodes: If True, show all nodes. If False, only show clusters 
+                           with at least 3 nodes (default: False)
+        """
         if path is None:
             path = self.output_dir
         
@@ -620,7 +626,7 @@ class AgentTools:
         if self.dag.nodes:
             try:
                 png_path = path / "execution_dag.png"
-                self.dag.visualize(output_path=png_path, title="Agent Execution DAG")
+                self.dag.visualize(output_path=png_path, title="", show_all=show_all_nodes)
             except Exception as e:
                 print(f"Warning: Could not generate DAG visualization: {e}")
     
@@ -660,7 +666,7 @@ class AgentTools:
 # Agent Loop
 # =============================================================================
 
-def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", output_name: str = None, overwrite: bool = False, question_file: str = None):
+def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", output_name: str = None, overwrite: bool = False, question_file: str = None, show_all_dag_nodes: bool = False):
     """Run the agent on a task."""
     tasks_dir = Path(__file__).parent
     task_dir = tasks_dir / task_name
@@ -927,7 +933,7 @@ Be methodical, save intermediate results, and try alternatives if something fail
         json.dump(session_info, f, indent=2, default=str)
     
     # Save execution DAG
-    tools.save_dag()
+    tools.save_dag(show_all_nodes=show_all_dag_nodes)
     dag_stats = tools.dag.to_dict().get("metadata", {})
     
     print(f"\n{'=' * 60}")
@@ -960,9 +966,11 @@ def main():
     parser.add_argument("--max-iterations", type=int, default=100, help="Maximum iterations (default: 100)")
     parser.add_argument("--model", default="gpt-4o", help="OpenAI model (default: gpt-4o)")
     parser.add_argument("--overwrite", action="store_true", help="Delete and overwrite existing output directory")
+    parser.add_argument("--show-all-dag-nodes", action="store_true", 
+                        help="Show all nodes in DAG visualization (default: only clusters with 3+ nodes)")
     
     args = parser.parse_args()
-    run_agent(args.task, args.max_iterations, args.model, args.output, args.overwrite, args.question)
+    run_agent(args.task, args.max_iterations, args.model, args.output, args.overwrite, args.question, args.show_all_dag_nodes)
 
 
 if __name__ == "__main__":
