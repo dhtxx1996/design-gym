@@ -17,11 +17,7 @@ import statistics
 from dataclasses import dataclass, field
 from typing import Optional
 
-from dotenv import load_dotenv
 from openai import OpenAI, AsyncOpenAI
-
-load_dotenv()
-load_dotenv(Path(__file__).parent / ".env")
 
 
 # ============================================================================

@@ -20,12 +20,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-from dotenv import load_dotenv
 from openai import OpenAI
-
-# Load environment variables
-load_dotenv()
-load_dotenv(Path(__file__).parent / ".env")
 
 # Add current directory for imports
 sys.path.insert(0, str(Path(__file__).parent))
