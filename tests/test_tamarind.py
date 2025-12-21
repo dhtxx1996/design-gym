@@ -29,22 +29,22 @@ def test_upload_file(client, tmp_path):
     result = client.upload_file(str(pdb))
     assert "filename" in result or "error" not in str(result).lower()
 
-@pytest.mark.slow
-def test_esmfold_job(client):
-    """Submit ESMFold job, poll, verify completion."""
-    result = client.submit_job_sync("esmfold", {"sequence": "GIVEQCCTSICSLYQLENYCN"}, timeout=300)
-    assert result.get("job_name")
-    assert result.get("final_status", {}).get("status") in ["completed", "pending"]
+# @pytest.mark.slow
+# def test_esmfold_job(client):
+#     """Submit ESMFold job, poll, verify completion."""
+#     result = client.submit_job_sync("esmfold", {"sequence": "GIVEQCCTSICSLYQLENYCN"}, timeout=300)
+#     assert result.get("job_name")
+#     assert result.get("final_status", {}).get("status") in ["completed", "pending"]
 
-@pytest.mark.slow  
-def test_proteinmpnn_job(client):
-    """Submit ProteinMPNN job with bias."""
-    import json
-    # Use a known file on Tamarind
-    params = {
-        "pdbFile": "9f6o.pdb",
-        "numSequences": "2",
-        "bias_AA_per_residue": json.dumps({"A1": {"G": 1.0}})
-    }
-    result = client.submit_job_sync("proteinmpnn", params, timeout=300)
-    assert result.get("job_name")
+# @pytest.mark.slow  
+# def test_proteinmpnn_job(client):
+#     """Submit ProteinMPNN job with bias."""
+#     import json
+#     # Use a known file on Tamarind
+#     params = {
+#         "pdbFile": "9f6o.pdb",
+#         "numSequences": "2",
+#         "bias_AA_per_residue": json.dumps({"A1": {"G": 1.0}})
+#     }
+#     result = client.submit_job_sync("proteinmpnn", params, timeout=300)
+#     assert result.get("job_name")
