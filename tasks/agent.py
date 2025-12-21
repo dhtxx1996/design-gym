@@ -947,7 +947,12 @@ Be methodical, save intermediate results, and try alternatives if something fail
                         arguments = {}
                     
                     print(f"  {Colors.tool('Tool:')} {Colors.highlight(tool_name)}")
-                    if tool_name != "run_python":
+                    if tool_name == "run_python":
+                        code = arguments.get("code", "")
+                        print(f"  {Colors.dim('Code:')}")
+                        for line in code.split('\n'):
+                            print(f"    {Colors.colorize(line, Colors.GREEN)}")
+                    else:
                         print(f"  {Colors.dim('Args:')} {Colors.dim(json.dumps(arguments, indent=2)[:200])}")
                     
                     # Track file creation
