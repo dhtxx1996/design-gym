@@ -16,7 +16,6 @@ from typing import Optional
 from datetime import datetime
 
 import requests
-from dotenv import load_dotenv
 
 
 class TamarindClient:
@@ -33,15 +32,10 @@ class TamarindClient:
             session_id: Unique identifier for this workflow session. Used to track which
                        jobs were submitted by this agent run vs. external sources.
         """
-        # Load .env from current directory or tasks directory
-        load_dotenv()
-        load_dotenv(Path(__file__).parent / ".env")
-        
         self.api_key = api_key or os.getenv("TAMARIND_API_KEY")
         if not self.api_key:
             raise ValueError(
-                "API key required. Set TAMARIND_API_KEY env var or pass api_key parameter. "
-                "Copy tasks/env.example to tasks/.env and add your key."
+                "API key required. Set TAMARIND_API_KEY environment variable or pass api_key parameter."
             )
         
         self._headers = {"x-api-key": self.api_key}
