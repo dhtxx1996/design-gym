@@ -34,6 +34,92 @@ from dag_tracker import DAGTracker
 
 
 # =============================================================================
+# Color Utilities for Terminal Output
+# =============================================================================
+
+class Colors:
+    """ANSI color codes for terminal output."""
+    # Reset
+    RESET = '\033[0m'
+    
+    # Regular colors
+    BLACK = '\033[30m'
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    YELLOW = '\033[33m'
+    BLUE = '\033[34m'
+    MAGENTA = '\033[35m'
+    CYAN = '\033[36m'
+    WHITE = '\033[37m'
+    
+    # Bright colors
+    BRIGHT_BLACK = '\033[90m'
+    BRIGHT_RED = '\033[91m'
+    BRIGHT_GREEN = '\033[92m'
+    BRIGHT_YELLOW = '\033[93m'
+    BRIGHT_BLUE = '\033[94m'
+    BRIGHT_MAGENTA = '\033[95m'
+    BRIGHT_CYAN = '\033[96m'
+    BRIGHT_WHITE = '\033[97m'
+    
+    # Styles
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+    UNDERLINE = '\033[4m'
+    
+    @staticmethod
+    def colorize(text: str, color: str, bold: bool = False) -> str:
+        """Apply color and optional bold styling to text."""
+        style = Colors.BOLD if bold else ""
+        return f"{style}{color}{text}{Colors.RESET}"
+    
+    @staticmethod
+    def header(text: str) -> str:
+        """Format header text."""
+        return Colors.colorize(text, Colors.BRIGHT_CYAN, bold=True)
+    
+    @staticmethod
+    def success(text: str) -> str:
+        """Format success message."""
+        return Colors.colorize(text, Colors.BRIGHT_GREEN)
+    
+    @staticmethod
+    def error(text: str) -> str:
+        """Format error message."""
+        return Colors.colorize(text, Colors.BRIGHT_RED, bold=True)
+    
+    @staticmethod
+    def warning(text: str) -> str:
+        """Format warning message."""
+        return Colors.colorize(text, Colors.BRIGHT_YELLOW)
+    
+    @staticmethod
+    def info(text: str) -> str:
+        """Format info message."""
+        return Colors.colorize(text, Colors.BRIGHT_BLUE)
+    
+    @staticmethod
+    def tool(text: str) -> str:
+        """Format tool call."""
+        return Colors.colorize(text, Colors.BRIGHT_YELLOW)
+    
+    @staticmethod
+    def iteration(text: str) -> str:
+        """Format iteration marker."""
+        return Colors.colorize(text, Colors.BRIGHT_MAGENTA, bold=True)
+    
+    @staticmethod
+    def highlight(text: str) -> str:
+        """Highlight important text."""
+        return Colors.colorize(text, Colors.BRIGHT_CYAN)
+    
+    @staticmethod
+    def dim(text: str) -> str:
+        """Dim less important text."""
+        return Colors.colorize(text, Colors.DIM)
+
+
+# =============================================================================
 # Tool Definitions for OpenAI Function Calling
 # =============================================================================
 
@@ -677,7 +763,7 @@ def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", o
     session_id = f"{name}_{datetime.now().strftime('%H%M%S_%f')}"
     
     if not task_dir.exists():
-        print(f"Error: Task directory not found: {task_dir}")
+        print(f"{Colors.error('Error:')} Task directory not found: {task_dir}")
         return
     
     # Check for existing output directory
@@ -687,25 +773,25 @@ def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", o
         
         if has_contents:
             if overwrite:
-                print(f"Overwriting existing output directory: {output_dir}")
+                print(f"{Colors.warning('Overwriting existing output directory:')} {output_dir}")
                 shutil.rmtree(output_dir)
             else:
-                print(f"Error: Output directory already exists and is not empty: {output_dir}")
-                print("  Results from previous runs would contaminate evaluation.")
-                print("  Options:")
-                print("    1. Use --overwrite to delete and replace the existing output")
-                print("    2. Use a different --output name")
-                print("    3. Manually delete the directory")
+                print(f"{Colors.error('Error:')} Output directory already exists and is not empty: {output_dir}")
+                print(f"  {Colors.warning('Results from previous runs would contaminate evaluation.')}")
+                print(f"  {Colors.info('Options:')}")
+                print(f"    1. Use --overwrite to delete and replace the existing output")
+                print(f"    2. Use a different --output name")
+                print(f"    3. Manually delete the directory")
                 return
     
-    print("=" * 60)
-    print("AI Agent for Computational Biology")
-    print("=" * 60)
-    print(f"Task: {task_name}")
-    print(f"Output: {output_dir}")
-    print(f"Session ID: {session_id}")
-    print(f"Model: {model}")
-    print(f"Max iterations: {max_iterations}")
+    print(Colors.header("=" * 60))
+    print(Colors.header("AI Agent for Computational Biology"))
+    print(Colors.header("=" * 60))
+    print(f"{Colors.info('Task:')} {task_name}")
+    print(f"{Colors.info('Output:')} {output_dir}")
+    print(f"{Colors.info('Session ID:')} {session_id}")
+    print(f"{Colors.info('Model:')} {model}")
+    print(f"{Colors.info('Max iterations:')} {max_iterations}")
     print()
     
     client = OpenAI()
@@ -717,10 +803,10 @@ def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", o
         question_path = task_dir / question_path
     if question_path.exists():
         task_description = question_path.read_text()
-        print(f"Question: {question_path.name}")
+        print(f"{Colors.info('Question:')} {question_path.name}")
     else:
         task_description = "Complete the computational biology task in this directory. Explore the files to understand requirements."
-        print(f"Question: (default prompt)")
+        print(f"{Colors.info('Question:')} (default prompt)")
     
     # Task-agnostic system prompt
     system_prompt = f"""You are an expert computational biologist. Complete the task step by step using the available tools.
@@ -833,7 +919,7 @@ Be methodical, save intermediate results, and try alternatives if something fail
     
     while iteration < max_iterations and not task_completed:
         iteration += 1
-        print(f"\n--- Iteration {iteration}/{max_iterations} ---")
+        print(f"\n{Colors.iteration(f'--- Iteration {iteration}/{max_iterations} ---')}")
         
         try:
             response = client.chat.completions.create(
@@ -860,9 +946,9 @@ Be methodical, save intermediate results, and try alternatives if something fail
                     except json.JSONDecodeError:
                         arguments = {}
                     
-                    print(f"  Tool: {tool_name}")
+                    print(f"  {Colors.tool('Tool:')} {Colors.highlight(tool_name)}")
                     if tool_name != "run_python":
-                        print(f"  Args: {json.dumps(arguments, indent=2)[:200]}")
+                        print(f"  {Colors.dim('Args:')} {Colors.dim(json.dumps(arguments, indent=2)[:200])}")
                     
                     # Track file creation
                     if tool_name == "write_file" and "path" in arguments:
@@ -872,7 +958,7 @@ Be methodical, save intermediate results, and try alternatives if something fail
                     
                     if result.startswith("TASK_COMPLETE:"):
                         task_completed = True
-                        print(f"\n{result}")
+                        print(f"\n{Colors.success(result)}")
                     
                     messages.append({
                         "role": "tool",
@@ -881,13 +967,13 @@ Be methodical, save intermediate results, and try alternatives if something fail
                     })
                     
                     preview = result[:300] + "..." if len(result) > 300 else result
-                    print(f"  Result: {preview}")
+                    print(f"  {Colors.dim('Result:')} {Colors.dim(preview)}")
             
             elif assistant_message.content:
-                print(f"  Assistant: {assistant_message.content[:500]}")
+                print(f"  {Colors.info('Assistant:')} {assistant_message.content[:500]}")
                 
         except Exception as e:
-            print(f"  Error: {e}")
+            print(f"  {Colors.error('Error:')} {e}")
             traceback.print_exc()
             break
     
@@ -936,26 +1022,27 @@ Be methodical, save intermediate results, and try alternatives if something fail
     tools.save_dag(show_all_nodes=show_all_dag_nodes)
     dag_stats = tools.dag.to_dict().get("metadata", {})
     
-    print(f"\n{'=' * 60}")
-    print(f"Agent finished after {iteration} iterations")
-    print(f"Execution time: {session_info['execution_metrics']['execution_time_formatted']}")
-    print(f"LLM calls: {llm_calls}")
-    print(f"Tokens: {total_prompt_tokens:,} prompt + {total_completion_tokens:,} completion = {total_prompt_tokens + total_completion_tokens:,} total")
-    print(f"Files created: {len(actual_files)}")
-    print(f"Session ID: {session_id}")
+    print(f"\n{Colors.header('=' * 60)}")
+    print(Colors.header("Agent finished"))
+    print(f"{Colors.highlight('Iterations:')} {iteration}")
+    print(f"{Colors.highlight('Execution time:')} {session_info['execution_metrics']['execution_time_formatted']}")
+    print(f"{Colors.highlight('LLM calls:')} {llm_calls}")
+    print(f"{Colors.highlight('Tokens:')} {total_prompt_tokens:,} prompt + {total_completion_tokens:,} completion = {total_prompt_tokens + total_completion_tokens:,} total")
+    print(f"{Colors.highlight('Files created:')} {len(actual_files)}")
+    print(f"{Colors.info('Session ID:')} {session_id}")
     tamarind_info = session_info.get('tamarind', {})
-    print(f"Tamarind files uploaded: {tamarind_info.get('file_count', 0)}")
-    print(f"Tamarind jobs submitted: {tamarind_info.get('job_count', 0)}")
+    print(f"{Colors.info('Tamarind files uploaded:')} {tamarind_info.get('file_count', 0)}")
+    print(f"{Colors.info('Tamarind jobs submitted:')} {tamarind_info.get('job_count', 0)}")
     if tamarind_info.get('files_uploaded'):
-        print(f"  Files: {tamarind_info['files_uploaded']}")
+        print(f"  {Colors.dim('Files:')} {Colors.dim(str(tamarind_info['files_uploaded']))}")
     if tamarind_info.get('jobs_submitted'):
-        print(f"  Jobs: {tamarind_info['jobs_submitted']}")
-    print(f"Execution DAG: {dag_stats.get('node_count', 0)} nodes, {dag_stats.get('edge_count', 0)} edges")
-    print(f"Outputs saved to: {output_dir}")
-    print(f"Conversation log: {log_path}")
-    print(f"Session info: {session_path}")
+        print(f"  {Colors.dim('Jobs:')} {Colors.dim(str(tamarind_info['jobs_submitted']))}")
+    print(f"{Colors.info('Execution DAG:')} {dag_stats.get('node_count', 0)} nodes, {dag_stats.get('edge_count', 0)} edges")
+    print(f"{Colors.info('Outputs saved to:')} {output_dir}")
+    print(f"{Colors.dim('Conversation log:')} {log_path}")
+    print(f"{Colors.dim('Session info:')} {session_path}")
     if dag_stats.get('node_count', 0) > 0:
-        print(f"DAG visualization: {output_dir / 'execution_dag.png'}")
+        print(f"{Colors.dim('DAG visualization:')} {output_dir / 'execution_dag.png'}")
 
 
 def main():
