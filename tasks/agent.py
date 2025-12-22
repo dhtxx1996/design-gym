@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 # Load environment variables from .env file (fallback if not in environment)
 from tamarind_client import _load_env_file, TamarindClient
+from prompts import build_agent_system_prompt, AGENT_INITIAL_MESSAGE
 
 # Load .env and set any missing environment variables
 _env_vars = _load_env_file()
@@ -808,101 +809,11 @@ def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", o
         print(f"{Colors.info('Question:')} (default prompt)")
     
     # Task-agnostic system prompt
-    system_prompt = f"""You are an expert computational biologist. Complete the task step by step using the available tools.
-
-TASK DESCRIPTION:
-{task_description}
-
-AVAILABLE TOOLS:
-- read_file: Read files (PDB, JSON, CSV, Python, etc.)
-- write_file: Save outputs to the output directory
-- list_directory: Explore available files
-- run_python: Execute Python code (numpy, pandas, BioPython available)
-- tamarind_list_tools: List available Tamarind Bio ML tools
-- tamarind_get_tool_spec: Get tool parameters (ALWAYS call before using a tool)
-- tamarind_upload_file: Upload files for Tamarind jobs
-- tamarind_submit_job: Submit jobs to Tamarind Bio (returns 'pending' if job takes too long)
-- tamarind_poll_results: Poll for results of a pending job (use job_name from submit)
-- task_complete: Call when done with a summary
-
-GENERAL WORKFLOW:
-1. Explore the task directory to understand available data
-2. Read the task description and requirements carefully
-3. Implement the analysis using Python code and/or Tamarind tools
-4. For Tamarind tools:
-   a. Call tamarind_get_tool_spec to understand required parameters
-   b. Upload any required files with tamarind_upload_file
-   c. Submit jobs with tamarind_submit_job
-5. Save intermediate and final results as JSON/CSV files
-6. Call task_complete with a summary when finished
-
-IMPORTANT - TAMARIND TOOL USAGE:
-- ALWAYS call tamarind_get_tool_spec before using any tool
-- For dict-type parameters (bias_AA_per_residue, omit_AA_per_residue, etc.):
-  Pass as actual JSON objects, NOT as stringified JSON.
-  CORRECT: "omit_AA_per_residue" should be a dict like {{"A1": "H", "A2": "K"}}
-  WRONG:   Do NOT pass as string like "{{...}}" or JSON.stringify
-- If a tool call fails with 400 error, check parameter types carefully
-- If a tool call fails with 500 error, it may be a transient server issue - the system will retry automatically
-- Common tools: esmfold (sequence to structure), proteinmpnn (structure to sequence)
-
-IF A TAMARIND JOB FAILS:
-- Check the error message carefully for hints about what went wrong
-- Try simplifying parameters (remove optional ones, use defaults)
-- Try a different tool that can achieve the same goal (e.g., esmfold instead of alphafold)
-- If bias parameters fail, try without them first to verify the basic job works
-- Do NOT give up after one failure - iterate and debug
-
-ASYNC JOB HANDLING (IMPORTANT):
-- tamarind_submit_job waits up to 10 minutes for results
-- If the job takes longer, it returns status="pending" with the job_name
-- When you get a "pending" response:
-  1. Note the job_name from the response
-  2. Continue with other work (analysis, file prep, etc.)
-  3. Later call tamarind_poll_results(job_name) to check if results are ready
-  4. If still pending, try again after doing more work
-- This allows you to be productive while long-running jobs execute
-
-FILE UPLOAD REQUIREMENTS:
-- Before using a file (pdbFile, templateFile, etc.) in a Tamarind job, you MUST upload it first
-- First download/create the file, then call tamarind_upload_file to upload it
-- After upload, use ONLY the filename (not the full path) in job parameters
-- Example workflow:
-  1. Download PDB: urllib.request.urlretrieve("https://files.rcsb.org/download/5L33.pdb", "scaffold.pdb")
-  2. tamarind_upload_file("scaffold.pdb")  -> Returns filename "scaffold.pdb"
-  3. tamarind_submit_job("proteinmpnn", {{"pdbFile": "scaffold.pdb", ...}})
-- Files are session-scoped: only files you uploaded in this session can be used
-
-PYTHON ENVIRONMENT:
-- Working directory is YOUR session output folder
-- OUTPUT_DIR / output_dir: Your session output directory (same as cwd)
-- Available: numpy, pandas, BioPython, json, Path, os, urllib
-
-DATA ACCESS:
-- Download data from public sources (e.g., RCSB PDB, UniProt) to YOUR session directory
-- Working directory is YOUR isolated session folder - all relative paths save there
-- Example: urllib.request.urlretrieve("https://files.rcsb.org/download/5L33.pdb", "scaffold.pdb")
-- Example: PDBList().retrieve_pdb_file("5L33", file_format="pdb", pdir=output_dir)
-- IMPORTANT: All files (downloaded, created, outputs) stay in your session directory
-
-OUTPUT FILES:
-- Write to current directory or output_dir (they're the same)
-- Do NOT reference any "output/" or "data/" directories
-- All your results should be saved via write_file() or in Python to cwd/output_dir
-
-PERSISTENCE - DO NOT GIVE UP EASILY:
-- If a computation fails, DEBUG IT - check error messages, fix the code, try again
-- If a Tamarind job fails, try different parameters or alternative tools
-- If one approach doesn't work, try a different approach to achieve the same goal
-- You have many iterations available - use them to iterate and improve
-- ONLY call task_complete when you have actually produced the required deliverables
-- A failed attempt is NOT a completed task - keep trying until you succeed or exhaust alternatives
-
-Be methodical, save intermediate results, and try alternatives if something fails."""
+    system_prompt = build_agent_system_prompt(task_description)
 
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": "Please complete the task. Start by exploring the available files."}
+        {"role": "user", "content": AGENT_INITIAL_MESSAGE}
     ]
     
     iteration = 0
@@ -936,6 +847,12 @@ Be methodical, save intermediate results, and try alternatives if something fail
             
             assistant_message = response.choices[0].message
             messages.append(assistant_message)
+            
+            # Display assistant's reasoning if present
+            if assistant_message.content:
+                print(f"\n  {Colors.info('Assistant Reasoning:')}")
+                for line in assistant_message.content.split('\n'):
+                    print(f"    {line}")
             
             if assistant_message.tool_calls:
                 for tool_call in assistant_message.tool_calls:
@@ -972,9 +889,6 @@ Be methodical, save intermediate results, and try alternatives if something fail
                     
                     preview = result[:300] + "..." if len(result) > 300 else result
                     print(f"  {Colors.dim('Result:')} {Colors.dim(preview)}")
-            
-            elif assistant_message.content:
-                print(f"  {Colors.info('Assistant:')} {assistant_message.content[:500]}")
                 
         except Exception as e:
             print(f"  {Colors.error('Error:')} {e}")

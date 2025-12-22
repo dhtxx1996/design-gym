@@ -11,6 +11,8 @@ agent and evaluation system, making them easier to review, modify, and test.
 
 AGENT_SYSTEM_TEMPLATE = """You are an expert computational biologist. Complete the task step by step using the available tools.
 
+IMPORTANT: ALWAYS explain your reasoning and thought process before and between tool calls in your messages. Describe what you're planning to do and why before calling tools. This is crucial for evaluation and helps us understand your approach.
+
 TASK DESCRIPTION:
 {task_description}
 
@@ -27,15 +29,18 @@ AVAILABLE TOOLS:
 - task_complete: Call when done with a summary
 
 GENERAL WORKFLOW:
-1. Explore the task directory to understand available data
-2. Read the task description and requirements carefully
-3. Implement the analysis using Python code and/or Tamarind tools
-4. For Tamarind tools:
+1. EXPLAIN what you plan to do and why (reasoning is crucial for evaluation)
+2. Explore the task directory to understand available data
+3. Read the task description and requirements carefully
+4. DESCRIBE your approach before implementing each step
+5. Implement the analysis using Python code and/or Tamarind tools
+6. For Tamarind tools:
    a. Call tamarind_get_tool_spec to understand required parameters
    b. Upload any required files with tamarind_upload_file
    c. Submit jobs with tamarind_submit_job
-5. Save intermediate and final results as JSON/CSV files
-6. Call task_complete with a summary when finished
+7. EXPLAIN results and next steps between major workflow components
+8. Save intermediate and final results as JSON/CSV files
+9. Call task_complete with a summary when finished
 
 IMPORTANT - TAMARIND TOOL USAGE:
 - ALWAYS call tamarind_get_tool_spec before using any tool
@@ -151,6 +156,8 @@ EVALUATION GUIDELINES FOR TOOL FAILURES AND EXECUTION CONDITIONS:
 Score each rubric category based on the agent's outputs. For EACH category, provide:
 - score: the numeric score (0 to max points for that category)
 - reasoning: a specific explanation of why this score was given, referencing the agent's outputs
+- related_files: a list of filenames from the AGENT OUTPUT DIRECTORY that are most relevant to this specific criterion
+- related_steps: a list of tool call indices (from the idx field in the TOOL FAILURE ANALYSIS or tool log) that are most relevant to this specific criterion
 
 Additionally, act as an EXECUTION JUDGE and report:
 - execution_ok: true if the execution environment and tools were sufficiently functional to fairly judge the agent

@@ -266,10 +266,10 @@ def _build_eval_prompt(task_dir: Path, output_dir: Path, categories: dict,
     question = (task_dir / "question.md").read_text()[:3000] if (task_dir / "question.md").exists() else ""
     outputs = load_outputs(output_dir)
     
-    # Build expected JSON format from categories - now with per-category reasoning
+    # Build expected JSON format from categories - now with per-category reasoning and navigation links
     if categories:
         category_format = ", ".join(
-            f'"{k}": {{"score": <0-{v["max"]}>, "reasoning": "<why this score>"}}'
+            f'"{k}": {{"score": <0-{v["max"]}>, "reasoning": "<why this score>", "related_files": ["<filename1>", ...], "related_steps": [<step_idx1>, ...]}}'
             for k, v in categories.items()
         )
         total_max = sum(v["max"] for v in categories.values())
@@ -340,7 +340,7 @@ def _aggregate_results(all_results: list[dict], categories: dict,
     """Aggregate results from multiple evaluation rounds."""
     scores = [r.get("total", 0) for r in all_results]
     
-    # Average each category - handles {"score": X, "reasoning": "..."} format
+    # Average each category - handles {"score": X, "reasoning": "...", "related_files": [...], "related_steps": [...]} format
     category_scores = {}
     for cat in categories:
         cat_data = [r.get(cat, {}) for r in all_results]
@@ -352,10 +352,26 @@ def _aggregate_results(all_results: list[dict], categories: dict,
             d.get("reasoning", "") if isinstance(d, dict) else ""
             for d in cat_data
         ]
+        
+        # Aggregate related files and steps across all rounds
+        all_related_files = set()
+        all_related_steps = set()
+        for d in cat_data:
+            if isinstance(d, dict):
+                files = d.get("related_files")
+                if isinstance(files, list):
+                    all_related_files.update(files)
+                
+                steps = d.get("related_steps")
+                if isinstance(steps, list):
+                    all_related_steps.update(steps)
+
         category_scores[cat] = {
             "mean": statistics.mean(cat_scores),
             "scores": cat_scores,
-            "reasoning": cat_reasoning
+            "reasoning": cat_reasoning,
+            "related_files": sorted(list(all_related_files)),
+            "related_steps": sorted(list(all_related_steps))
         }
     
     # Aggregate execution judge signals
@@ -433,6 +449,8 @@ def _build_evaluation_entry(eval_result: dict, categories: dict,
                 "max": categories.get(cat_key, {}).get("max", 0),
                 "scores": cat_data.get("scores", []),
                 "reasoning": cat_data.get("reasoning", []),
+                "related_files": cat_data.get("related_files", []),
+                "related_steps": cat_data.get("related_steps", []),
             }
             for cat_key, cat_data in eval_result.get("breakdown", {}).items()
         },
@@ -1023,6 +1041,23 @@ def main():
         print(f"\n{'='*60}")
         print("MANIFEST FILES (for meta-analysis)")
         print("="*60)
+        
+        all_tasks_data = {}
+        repo_root = Path(__file__).parent.parent
+        outputs_root = repo_root / "outputs"
+        
+        # Update a global index for the dashboard
+        for t_dir in outputs_root.iterdir():
+            if t_dir.is_dir() and not t_dir.name.startswith('.'):
+                task_name = t_dir.name
+                run_dirs = find_all_output_dirs(task_name)
+                all_tasks_data[task_name] = [rd.name for rd in run_dirs]
+        
+        index_path = outputs_root / "index.json"
+        with open(index_path, "w") as f:
+            json.dump(all_tasks_data, f, indent=2)
+        print(f"Updated dashboard index: {index_path}")
+
         for output_dir in output_dirs:
             manifest_path = output_dir / "manifest.json"
             if manifest_path.exists():
