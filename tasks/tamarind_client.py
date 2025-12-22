@@ -18,6 +18,58 @@ from datetime import datetime
 import requests
 
 
+def _load_env_file(env_path: Path = None) -> dict:
+    """
+    Load environment variables from a .env file.
+    
+    Args:
+        env_path: Path to .env file. If None, looks for .env in the project root.
+        
+    Returns:
+        Dict of loaded environment variables.
+    """
+    if env_path is None:
+        # Default to project root .env
+        env_path = Path(__file__).parent.parent / ".env"
+    
+    loaded = {}
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                # Skip comments and empty lines
+                if not line or line.startswith("#"):
+                    continue
+                # Parse KEY=value
+                if "=" in line:
+                    key, _, value = line.partition("=")
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    loaded[key] = value
+    return loaded
+
+
+def _get_env_with_fallback(key: str, env_path: Path = None) -> Optional[str]:
+    """
+    Get environment variable, falling back to .env file if not set.
+    
+    Args:
+        key: Environment variable name
+        env_path: Optional path to .env file
+        
+    Returns:
+        Value from environment or .env file, or None if not found.
+    """
+    # First check environment variable
+    value = os.getenv(key)
+    if value:
+        return value
+    
+    # Fall back to .env file
+    env_vars = _load_env_file(env_path)
+    return env_vars.get(key)
+
+
 class TamarindClient:
     """Client for the Tamarind Bio API with session-scoped job tracking."""
     
@@ -28,14 +80,16 @@ class TamarindClient:
         Initialize the Tamarind client.
         
         Args:
-            api_key: Tamarind API key. If not provided, loads from TAMARIND_API_KEY env var.
+            api_key: Tamarind API key. If not provided, loads from TAMARIND_API_KEY env var,
+                    falling back to .env file in project root.
             session_id: Unique identifier for this workflow session. Used to track which
                        jobs were submitted by this agent run vs. external sources.
         """
-        self.api_key = api_key or os.getenv("TAMARIND_API_KEY")
+        self.api_key = api_key or _get_env_with_fallback("TAMARIND_API_KEY")
         if not self.api_key:
             raise ValueError(
-                "API key required. Set TAMARIND_API_KEY environment variable or pass api_key parameter."
+                "API key required. Set TAMARIND_API_KEY environment variable, "
+                "add it to .env file, or pass api_key parameter."
             )
         
         self._headers = {"x-api-key": self.api_key}
