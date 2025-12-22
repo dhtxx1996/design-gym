@@ -697,7 +697,7 @@ class AgentTools:
             # Don't fail the tool call if DAG tracking fails
             print(f"[dag] Warning: tracking failed: {e}")
     
-    def execute_tool(self, tool_name: str, arguments: dict) -> str:
+    def execute_tool(self, tool_name: str, arguments: dict, reasoning: str = None, tokens: dict = None) -> str:
         import time as _time
         handlers = {
             "read_file": lambda: self.read_file(arguments["path"]),
@@ -722,10 +722,14 @@ class AgentTools:
         self.tool_calls.append({
             "idx": len(self.tool_calls),
             "name": tool_name,
+            "arguments": arguments,
+            "reasoning": reasoning,
+            "tokens": tokens,
             "timestamp": datetime.now().isoformat(),
             "duration_ms": duration_ms,
             "status": "error" if is_error else "success",
             "preview": result[:150].replace("\n", " "),
+            "result": result if len(result) < 10000 else result[:10000] + "\n... [truncated]"
         })
         
         # Auto-track in DAG
@@ -841,7 +845,13 @@ def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", o
             
             # Track LLM call metrics
             llm_calls += 1
+            turn_tokens = None
             if response.usage:
+                turn_tokens = {
+                    "prompt": response.usage.prompt_tokens,
+                    "completion": response.usage.completion_tokens,
+                    "total": response.usage.total_tokens
+                }
                 total_prompt_tokens += response.usage.prompt_tokens
                 total_completion_tokens += response.usage.completion_tokens
             
@@ -849,9 +859,10 @@ def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", o
             messages.append(assistant_message)
             
             # Display assistant's reasoning if present
-            if assistant_message.content:
+            reasoning = assistant_message.content
+            if reasoning:
                 print(f"\n  {Colors.info('Assistant Reasoning:')}")
-                for line in assistant_message.content.split('\n'):
+                for line in reasoning.split('\n'):
                     print(f"    {line}")
             
             if assistant_message.tool_calls:
@@ -875,7 +886,13 @@ def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", o
                     if tool_name == "write_file" and "path" in arguments:
                         files_created.append(arguments["path"])
                     
-                    result = tools.execute_tool(tool_name, arguments)
+                    # Pass reasoning and tokens to execute_tool for observability
+                    result = tools.execute_tool(
+                        tool_name, 
+                        arguments, 
+                        reasoning=reasoning if tool_call == assistant_message.tool_calls[0] else None,
+                        tokens=turn_tokens if tool_call == assistant_message.tool_calls[0] else None
+                    )
                     
                     if result.startswith("TASK_COMPLETE:"):
                         task_completed = True
@@ -916,6 +933,22 @@ def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", o
     tamarind_summary = tools.tamarind.get_session_summary() if tools._tamarind else {}
     dag_data = tools.dag.to_dict()
     
+    # Collect system environment info
+    import platform
+    system_info = {
+        "os": platform.system(),
+        "os_release": platform.release(),
+        "python_version": platform.python_version(),
+        "libraries": {}
+    }
+    for lib in ["numpy", "pandas", "Bio", "openai"]:
+        try:
+            import importlib
+            m = importlib.import_module(lib)
+            system_info["libraries"][lib] = getattr(m, "__version__", "unknown")
+        except ImportError:
+            system_info["libraries"][lib] = "not_installed"
+
     manifest = {
         "run_id": run_name,
         "task": task_name,
@@ -941,6 +974,7 @@ def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", o
             },
             "tamarind": tamarind_summary,
             "files_created": actual_files,
+            "system": system_info,
         },
         
         # DAG (embedded)
