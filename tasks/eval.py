@@ -406,7 +406,6 @@ def _aggregate_results(all_results: list[dict], categories: dict,
 
 def _build_evaluation_entry(eval_result: dict, categories: dict, 
                             eval_model: str, k: int, eval_id: str = None,
-                            rubric_version: str = "v1",
                             evaluator_prompt_template: str = None) -> dict:
     """Build an evaluation entry for the manifest."""
     from datetime import datetime
@@ -419,7 +418,6 @@ def _build_evaluation_entry(eval_result: dict, categories: dict,
         "evaluated_at": datetime.now().isoformat(),
         "eval_model": eval_model,
         "eval_rounds": k,
-        "rubric_version": rubric_version,
         
         "score": {
             "mean": mean_score,
@@ -444,13 +442,16 @@ def _build_evaluation_entry(eval_result: dict, categories: dict,
     
     # Save evaluator prompt template for optimization tracking
     if evaluator_prompt_template:
-        entry["prompts"] = {"evaluator_template": evaluator_prompt_template}
+        entry["prompts"] = {
+            "evaluator_template": evaluator_prompt_template,
+            "evaluator_template_source": "tasks/prompts.py:EVALUATOR_TEMPLATE",
+        }
     
     return entry
 
 
 def _build_rubric_entry(rubric_text: str, categories: dict, 
-                        rubric_version: str = "v1") -> dict:
+                        rubric_file_path: str = None) -> dict:
     """Build a rubric entry for the manifest."""
     from datetime import datetime
     
@@ -464,8 +465,8 @@ def _build_rubric_entry(rubric_text: str, categories: dict,
         })
     
     return {
-        "version": rubric_version,
         "loaded_at": datetime.now().isoformat(),
+        "file_path": rubric_file_path,
         "total_points": sum(v["max"] for v in categories.values()) if categories else 100,
         "criteria": criteria,
         "raw_content": rubric_text[:5000],
@@ -494,19 +495,18 @@ def save_per_output_eval(output_dir: Path, task_dir: Path, eval_result: dict,
         }
     
     # Build evaluation entry
-    rubric_text, _ = parse_rubric(task_dir / "rubric.txt")
-    rubric_version = "v1"  # Could be parameterized later
+    rubric_path = task_dir / "rubric.txt"
+    rubric_text, _ = parse_rubric(rubric_path)
+    rubric_file_path = f"tasks/{task_dir.name}/rubric.txt"
     
     eval_entry = _build_evaluation_entry(
-        eval_result, categories, eval_model, k, eval_id, rubric_version,
+        eval_result, categories, eval_model, k, eval_id,
         evaluator_prompt_template=EVALUATOR_TEMPLATE
     )
     
-    # Check if this rubric version already exists
-    existing_rubric_versions = {r.get("version") for r in manifest.get("rubrics", [])}
-    if rubric_version not in existing_rubric_versions:
-        rubric_entry = _build_rubric_entry(rubric_text, categories, rubric_version)
-        manifest.setdefault("rubrics", []).append(rubric_entry)
+    # Always update rubric entry with current content
+    rubric_entry = _build_rubric_entry(rubric_text, categories, rubric_file_path)
+    manifest["rubric"] = rubric_entry
     
     # Add or replace evaluation
     evaluations = manifest.setdefault("evaluations", [])
@@ -519,7 +519,10 @@ def save_per_output_eval(output_dir: Path, task_dir: Path, eval_result: dict,
     if not manifest.get("question", {}).get("content"):
         question_path = task_dir / "question.md"
         if question_path.exists():
-            manifest["question"] = {"content": question_path.read_text()[:5000]}
+            manifest["question"] = {
+                "content": question_path.read_text()[:5000],
+                "file_path": f"tasks/{task_dir.name}/question.md",
+            }
     
     # Save updated manifest
     with open(manifest_path, "w") as f:
@@ -821,7 +824,6 @@ def load_eval_results_as_dataframe(task: str, output_names: list[str] = None,
                 "eval_model": ev.get("eval_model"),
                 "eval_rounds": ev.get("eval_rounds"),
                 "evaluated_at": ev.get("evaluated_at"),
-                "rubric_version": ev.get("rubric_version"),
                 "score_mean": score.get("mean"),
                 "score_std": score.get("std"),
                 "score_max": score.get("max"),

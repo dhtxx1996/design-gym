@@ -1041,11 +1041,15 @@ Be methodical, save intermediate results, and try alternatives if something fail
         # Prompts used (for optimization tracking)
         "prompts": {
             "agent_system": system_prompt,
+            "agent_system_source": "tasks/agent.py:run_agent",
             "agent_initial": "Please complete the task. Start by exploring the available files.",
         },
         
         # Question/task input
-        "question": {"content": task_description},
+        "question": {
+            "content": task_description,
+            "file_path": str(question_path.relative_to(repo_root)) if question_path.exists() else None,
+        },
         
         # Placeholders for eval.py
         "evaluations": [],
