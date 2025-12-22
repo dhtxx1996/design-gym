@@ -20,11 +20,19 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-from openai import OpenAI
-
 # Add current directory for imports
 sys.path.insert(0, str(Path(__file__).parent))
-from tamarind_client import TamarindClient
+
+# Load environment variables from .env file (fallback if not in environment)
+from tamarind_client import _load_env_file, TamarindClient
+
+# Load .env and set any missing environment variables
+_env_vars = _load_env_file()
+for _key, _value in _env_vars.items():
+    if not os.getenv(_key):
+        os.environ[_key] = _value
+
+from openai import OpenAI
 from dag_tracker import DAGTracker
 
 
@@ -688,30 +696,8 @@ class AgentTools:
             # Don't fail the tool call if DAG tracking fails
             print(f"[dag] Warning: tracking failed: {e}")
     
-    def save_dag(self, path: Path = None, show_all_nodes: bool = False) -> None:
-        """Save the DAG to JSON and generate visualization.
-        
-        Args:
-            path: Output directory path (default: output_dir)
-            show_all_nodes: If True, show all nodes. If False, only show clusters 
-                           with at least 3 nodes (default: False)
-        """
-        if path is None:
-            path = self.output_dir
-        
-        # Save JSON
-        json_path = path / "execution_dag.json"
-        self.dag.save(json_path)
-        
-        # Save visualization
-        if self.dag.nodes:
-            try:
-                png_path = path / "execution_dag.png"
-                self.dag.visualize(output_path=png_path, title="", show_all=show_all_nodes)
-            except Exception as e:
-                print(f"Warning: Could not generate DAG visualization: {e}")
-    
     def execute_tool(self, tool_name: str, arguments: dict) -> str:
+        import time as _time
         handlers = {
             "read_file": lambda: self.read_file(arguments["path"]),
             "write_file": lambda: self.write_file(arguments["path"], arguments["content"]),
@@ -725,10 +711,23 @@ class AgentTools:
             "task_complete": lambda: f"TASK_COMPLETE: {arguments['summary']}",
         }
         
-        # Execute the tool
+        # Execute and time the tool
+        start = _time.time()
         result = handlers.get(tool_name, lambda: f"Unknown tool: {tool_name}")()
+        duration_ms = int((_time.time() - start) * 1000)
         
-        # Auto-track in DAG (no LLM call needed)
+        # Track tool call for manifest
+        is_error = "error" in result.lower()[:200] or "traceback" in result.lower()[:200]
+        self.tool_calls.append({
+            "idx": len(self.tool_calls),
+            "name": tool_name,
+            "timestamp": datetime.now().isoformat(),
+            "duration_ms": duration_ms,
+            "status": "error" if is_error else "success",
+            "preview": result[:150].replace("\n", " "),
+        })
+        
+        # Auto-track in DAG
         self._auto_track_tool(tool_name, arguments, result)
         
         return result
@@ -750,12 +749,17 @@ class AgentTools:
 def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", output_name: str = None, overwrite: bool = False, question_file: str = None, show_all_dag_nodes: bool = False):
     """Run the agent on a task."""
     tasks_dir = Path(__file__).parent
+    repo_root = tasks_dir.parent
     task_dir = tasks_dir / task_name
-    name = output_name or datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = task_dir / "agent_output" / name
+    
+    # Build output path: outputs/{task}/{YYYYMMDD_HHMMSS}_{name}/
+    now = datetime.now()
+    timestamp = now.strftime("%Y%m%d_%H%M%S")
+    run_name = f"{timestamp}_{output_name}" if output_name else timestamp
+    output_dir = repo_root / "outputs" / task_name / run_name
     
     # Generate unique session ID for tracking jobs
-    session_id = f"{name}_{datetime.now().strftime('%H%M%S_%f')}"
+    session_id = f"{run_name}_{now.strftime('%H%M%S_%f')}"
     
     if not task_dir.exists():
         print(f"{Colors.error('Error:')} Task directory not found: {task_dir}")
@@ -986,63 +990,105 @@ Be methodical, save intermediate results, and try alternatives if something fail
         log_data = [msg.model_dump() if hasattr(msg, "model_dump") else msg for msg in messages]
         json.dump(log_data, f, indent=2, default=str)
     
-    # List all files actually created in output directory (excluding logs)
+    # List all files created (excluding meta files)
+    meta_files = {"agent_log.json", "manifest.json", "dag.png"}
     actual_files = [
         str(f.relative_to(output_dir)) 
         for f in output_dir.rglob("*") 
-        if f.is_file() and f.name not in ["agent_log.json", "session_info.json"]
+        if f.is_file() and f.name not in meta_files
     ]
     
-    # Save session metadata for provenance tracking
-    session_info = tools.get_execution_summary()
-    session_info["iterations"] = iteration
-    session_info["task_completed"] = task_completed
-    session_info["model"] = model
+    # Build unified manifest.json
+    tamarind_summary = tools.tamarind.get_session_summary() if tools._tamarind else {}
+    dag_data = tools.dag.to_dict()
     
-    # Add execution metrics
-    session_info["execution_metrics"] = {
-        "execution_time_seconds": round(execution_time_seconds, 2),
-        "execution_time_formatted": f"{int(execution_time_seconds // 60)}m {int(execution_time_seconds % 60)}s",
-        "llm_calls": llm_calls,
-        "total_prompt_tokens": total_prompt_tokens,
-        "total_completion_tokens": total_completion_tokens,
-        "total_tokens": total_prompt_tokens + total_completion_tokens,
-        "files_created": actual_files,
-        "files_created_count": len(actual_files),
+    manifest = {
+        "run_id": run_name,
+        "task": task_name,
+        "created_at": datetime.now().isoformat(),
+        
+        # Execution data
+        "execution": {
+            "session_id": session_id,
+            "agent_model": model,
+            "iterations": iteration,
+            "task_completed": task_completed,
+            "start_time": tools.execution_start.isoformat(),
+            "end_time": datetime.now().isoformat(),
+            "duration_seconds": round(execution_time_seconds, 2),
+            "tokens": {
+                "prompt": total_prompt_tokens,
+                "completion": total_completion_tokens,
+                "total": total_prompt_tokens + total_completion_tokens,
+            },
+            "tool_calls": {
+                "total": len(tools.tool_calls),
+                "by_name": {},
+            },
+            "tamarind": tamarind_summary,
+            "files_created": actual_files,
+        },
+        
+        # DAG (embedded)
+        "dag": {
+            "nodes": dag_data.get("nodes", []),
+            "edges": dag_data.get("edges", []),
+        },
+        
+        # Tool call log
+        "tool_log": tools.tool_calls,
+        
+        # Prompts used (for optimization tracking)
+        "prompts": {
+            "agent_system": system_prompt,
+            "agent_initial": "Please complete the task. Start by exploring the available files.",
+        },
+        
+        # Question/task input
+        "question": {"content": task_description},
+        
+        # Placeholders for eval.py
+        "evaluations": [],
+        "rubrics": [],
     }
     
-    # Add DAG metadata
-    session_info["execution_dag"] = tools.dag.to_dict().get("metadata", {})
+    # Count tool calls by name
+    for tc in tools.tool_calls:
+        name_key = tc.get("name", "unknown")
+        manifest["execution"]["tool_calls"]["by_name"][name_key] = \
+            manifest["execution"]["tool_calls"]["by_name"].get(name_key, 0) + 1
     
-    session_path = output_dir / "session_info.json"
-    with open(session_path, "w") as f:
-        json.dump(session_info, f, indent=2, default=str)
+    manifest_path = output_dir / "manifest.json"
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, indent=2, default=str)
     
-    # Save execution DAG
-    tools.save_dag(show_all_nodes=show_all_dag_nodes)
-    dag_stats = tools.dag.to_dict().get("metadata", {})
+    # Save DAG visualization only
+    dag_stats = dag_data.get("metadata", {})
+    if tools.dag.nodes:
+        try:
+            png_path = output_dir / "dag.png"
+            tools.dag.visualize(output_path=png_path, title="", show_all=show_all_dag_nodes)
+        except Exception as e:
+            print(f"Warning: Could not generate DAG visualization: {e}")
     
+    # Print summary
+    exec_time_fmt = f"{int(execution_time_seconds // 60)}m {int(execution_time_seconds % 60)}s"
     print(f"\n{Colors.header('=' * 60)}")
     print(Colors.header("Agent finished"))
     print(f"{Colors.highlight('Iterations:')} {iteration}")
-    print(f"{Colors.highlight('Execution time:')} {session_info['execution_metrics']['execution_time_formatted']}")
+    print(f"{Colors.highlight('Execution time:')} {exec_time_fmt}")
     print(f"{Colors.highlight('LLM calls:')} {llm_calls}")
     print(f"{Colors.highlight('Tokens:')} {total_prompt_tokens:,} prompt + {total_completion_tokens:,} completion = {total_prompt_tokens + total_completion_tokens:,} total")
     print(f"{Colors.highlight('Files created:')} {len(actual_files)}")
     print(f"{Colors.info('Session ID:')} {session_id}")
-    tamarind_info = session_info.get('tamarind', {})
-    print(f"{Colors.info('Tamarind files uploaded:')} {tamarind_info.get('file_count', 0)}")
-    print(f"{Colors.info('Tamarind jobs submitted:')} {tamarind_info.get('job_count', 0)}")
-    if tamarind_info.get('files_uploaded'):
-        print(f"  {Colors.dim('Files:')} {Colors.dim(str(tamarind_info['files_uploaded']))}")
-    if tamarind_info.get('jobs_submitted'):
-        print(f"  {Colors.dim('Jobs:')} {Colors.dim(str(tamarind_info['jobs_submitted']))}")
+    print(f"{Colors.info('Tamarind files uploaded:')} {tamarind_summary.get('file_count', 0)}")
+    print(f"{Colors.info('Tamarind jobs submitted:')} {tamarind_summary.get('job_count', 0)}")
     print(f"{Colors.info('Execution DAG:')} {dag_stats.get('node_count', 0)} nodes, {dag_stats.get('edge_count', 0)} edges")
     print(f"{Colors.info('Outputs saved to:')} {output_dir}")
+    print(f"{Colors.dim('Manifest:')} {manifest_path}")
     print(f"{Colors.dim('Conversation log:')} {log_path}")
-    print(f"{Colors.dim('Session info:')} {session_path}")
     if dag_stats.get('node_count', 0) > 0:
-        print(f"{Colors.dim('DAG visualization:')} {output_dir / 'execution_dag.png'}")
+        print(f"{Colors.dim('DAG visualization:')} {output_dir / 'dag.png'}")
 
 
 def main():

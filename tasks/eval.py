@@ -8,6 +8,7 @@ Usage:
     python eval.py --task ph_sensitive_design --k 5 --parallel  # Parallel across outputs
 """
 
+import os
 import re
 import json
 import asyncio
@@ -18,6 +19,15 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from openai import OpenAI, AsyncOpenAI
+
+# Load .env file and set any missing environment variables
+from tamarind_client import _load_env_file
+from prompts import build_evaluator_prompt, EVALUATOR_TEMPLATE
+
+_env_vars = _load_env_file()
+for _key, _value in _env_vars.items():
+    if not os.getenv(_key):
+        os.environ[_key] = _value
 
 
 # ============================================================================
@@ -274,45 +284,17 @@ def _build_eval_prompt(task_dir: Path, output_dir: Path, categories: dict,
         if failure_context:
             failure_context = f"\n\nTOOL FAILURE ANALYSIS:\n{failure_context}\n"
     
-    prompt = f"""Evaluate this AI agent's solution to a computational biology task.
-
-TASK:
-{question}
-
-RUBRIC:
-{rubric_text}
-
-AGENT OUTPUT DIRECTORY: {output_dir.name}
-
-FILES PRODUCED:
-{json.dumps(outputs.get('files', []), indent=2)}
-
-FILE CONTENTS:
-{json.dumps({k: v for k, v in outputs.items() if k not in ['path', 'files']}, indent=2, default=str)[:5000]}
-{failure_context}
-EVALUATION GUIDELINES FOR TOOL FAILURES AND EXECUTION CONDITIONS:
-1. Use the TOOL FAILURE ANALYSIS section as factual telemetry about tool usage and errors.
-2. If tools/services were clearly unavailable (e.g., repeated network/HTTP 5xx errors), do NOT penalize
-   the agent for those "force majeure" conditions.
-3. RECOVERED ERRORS: If the agent initially misunderstood a tool but eventually figured it out and 
-   succeeded, do NOT penalize for the initial failures. Learning and recovery is expected behavior.
-4. PERSISTENT MISUSE: If the agent consistently failed to use a tool correctly despite multiple 
-   attempts (and never recovered), this MAY factor into the evaluation - but focus on whether the 
-   agent achieved the task goals through alternative means.
-5. FOCUS ON OUTCOMES: Primarily evaluate based on the final outputs and whether the task objectives 
-   were achieved, not on the number of failed attempts along the way.
-
-Score each rubric category based on the agent's outputs. For EACH category, provide:
-- score: the numeric score (0 to max points for that category)
-- reasoning: a specific explanation of why this score was given, referencing the agent's outputs
-
-Additionally, act as an EXECUTION JUDGE and report:
-- execution_ok: true if the execution environment and tools were sufficiently functional to fairly judge the agent
-- force_majeure: true if external factors (service outages, broken environment, etc.) substantially blocked the agent
-- force_majeure_reason: a short explanation if force_majeure is true
-
-Return JSON only:
-{{{category_format}, "total": <0-{total_max}>, "execution_ok": <true/false>, "force_majeure": <true/false>, "force_majeure_reason": "<short explanation>"}}"""
+    # Build prompt from centralized template
+    prompt = build_evaluator_prompt(
+        question=question,
+        rubric_text=rubric_text,
+        output_dir_name=output_dir.name,
+        files_json=json.dumps(outputs.get('files', []), indent=2),
+        contents_json=json.dumps({k: v for k, v in outputs.items() if k not in ['path', 'files']}, indent=2, default=str)[:5000],
+        failure_context=failure_context,
+        category_format=category_format,
+        total_max=total_max,
+    )
     
     return prompt, total_max
 
@@ -422,8 +404,134 @@ def _aggregate_results(all_results: list[dict], categories: dict,
     }
 
 
+def _build_evaluation_entry(eval_result: dict, categories: dict, 
+                            eval_model: str, k: int, eval_id: str = None,
+                            rubric_version: str = "v1",
+                            evaluator_prompt_template: str = None) -> dict:
+    """Build an evaluation entry for the manifest."""
+    from datetime import datetime
+    
+    max_points = sum(v["max"] for v in categories.values()) if categories else 100
+    mean_score = eval_result.get("mean", 0)
+    
+    entry = {
+        "eval_id": eval_id or f"eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        "evaluated_at": datetime.now().isoformat(),
+        "eval_model": eval_model,
+        "eval_rounds": k,
+        "rubric_version": rubric_version,
+        
+        "score": {
+            "mean": mean_score,
+            "std": eval_result.get("std", 0),
+            "max": max_points,
+            "normalized": mean_score / max_points if max_points > 0 else 0,
+            "all_rounds": eval_result.get("scores", []),
+        },
+        
+        "categories": {
+            cat_key: {
+                "mean": cat_data.get("mean", 0),
+                "max": categories.get(cat_key, {}).get("max", 0),
+                "scores": cat_data.get("scores", []),
+                "reasoning": cat_data.get("reasoning", []),
+            }
+            for cat_key, cat_data in eval_result.get("breakdown", {}).items()
+        },
+        
+        "failure_analysis": eval_result.get("failure_analysis", {}),
+    }
+    
+    # Save evaluator prompt template for optimization tracking
+    if evaluator_prompt_template:
+        entry["prompts"] = {"evaluator_template": evaluator_prompt_template}
+    
+    return entry
+
+
+def _build_rubric_entry(rubric_text: str, categories: dict, 
+                        rubric_version: str = "v1") -> dict:
+    """Build a rubric entry for the manifest."""
+    from datetime import datetime
+    
+    # Parse criteria with full/partial/zero descriptions
+    criteria = []
+    for key, cat in categories.items():
+        criteria.append({
+            "key": key,
+            "name": cat.get("name", key),
+            "max": cat.get("max", 0),
+        })
+    
+    return {
+        "version": rubric_version,
+        "loaded_at": datetime.now().isoformat(),
+        "total_points": sum(v["max"] for v in categories.values()) if categories else 100,
+        "criteria": criteria,
+        "raw_content": rubric_text[:5000],
+    }
+
+
+def save_per_output_eval(output_dir: Path, task_dir: Path, eval_result: dict,
+                         categories: dict, eval_model: str, k: int,
+                         eval_id: str = None, replace: bool = False) -> Path:
+    """Add evaluation to manifest.json in the agent output directory."""
+    from datetime import datetime
+    
+    manifest_path = output_dir / "manifest.json"
+    
+    # Load existing manifest or create minimal one
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text())
+    else:
+        # Fallback for old runs without manifest
+        manifest = {
+            "run_id": output_dir.name,
+            "task": task_dir.name,
+            "created_at": datetime.now().isoformat(),
+            "evaluations": [],
+            "rubrics": [],
+        }
+    
+    # Build evaluation entry
+    rubric_text, _ = parse_rubric(task_dir / "rubric.txt")
+    rubric_version = "v1"  # Could be parameterized later
+    
+    eval_entry = _build_evaluation_entry(
+        eval_result, categories, eval_model, k, eval_id, rubric_version,
+        evaluator_prompt_template=EVALUATOR_TEMPLATE
+    )
+    
+    # Check if this rubric version already exists
+    existing_rubric_versions = {r.get("version") for r in manifest.get("rubrics", [])}
+    if rubric_version not in existing_rubric_versions:
+        rubric_entry = _build_rubric_entry(rubric_text, categories, rubric_version)
+        manifest.setdefault("rubrics", []).append(rubric_entry)
+    
+    # Add or replace evaluation
+    evaluations = manifest.setdefault("evaluations", [])
+    if replace and eval_id:
+        evaluations = [e for e in evaluations if e.get("eval_id") != eval_id]
+        manifest["evaluations"] = evaluations
+    evaluations.append(eval_entry)
+    
+    # Update question if not present
+    if not manifest.get("question", {}).get("content"):
+        question_path = task_dir / "question.md"
+        if question_path.exists():
+            manifest["question"] = {"content": question_path.read_text()[:5000]}
+    
+    # Save updated manifest
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, indent=2, default=str)
+    
+    return manifest_path
+
+
 async def evaluate_output_async(task_dir: Path, output_dir: Path, client: AsyncOpenAI, 
-                                 model: str, categories: dict, k: int) -> tuple[str, dict]:
+                                 model: str, categories: dict, k: int,
+                                 save_per_output: bool = True,
+                                 eval_id: str = None, replace: bool = False) -> tuple[str, dict]:
     """Evaluate a single output directory with k parallel rounds."""
     if not output_dir.exists() or not output_dir.is_dir():
         return output_dir.name, None
@@ -443,11 +551,18 @@ async def evaluate_output_async(task_dir: Path, output_dir: Path, client: AsyncO
     scores = [r.get("total", 0) for r in all_results]
     print(f"  {output_dir.name}: {scores} (mean: {statistics.mean(scores):.1f})")
     
-    return output_dir.name, _aggregate_results(all_results, categories, failure_analysis)
+    result = _aggregate_results(all_results, categories, failure_analysis)
+    
+    # Save to manifest.json
+    if save_per_output:
+        save_per_output_eval(output_dir, task_dir, result, categories, model, k, eval_id, replace)
+    
+    return output_dir.name, result
 
 
 async def evaluate_async(task: str, output_dirs: list[Path], k: int, eval_model: str, 
-                         parallel_outputs: bool = False) -> tuple[dict, dict]:
+                         parallel_outputs: bool = False, save_per_output: bool = True,
+                         eval_id: str = None, replace: bool = False) -> tuple[dict, dict]:
     """Evaluate outputs with async parallelization.
     
     Args:
@@ -457,6 +572,9 @@ async def evaluate_async(task: str, output_dirs: list[Path], k: int, eval_model:
         eval_model: Model to use for evaluation
         parallel_outputs: If True, evaluate multiple outputs in parallel.
                          If False, only parallelize the k rounds within each output.
+        save_per_output: If True, update manifest.json with evaluation.
+        eval_id: Optional evaluation ID (auto-generated if not provided).
+        replace: If True and eval_id matches existing, replace it.
     """
     client = AsyncOpenAI()
     task_dir = Path(__file__).parent / task
@@ -468,7 +586,8 @@ async def evaluate_async(task: str, output_dirs: list[Path], k: int, eval_model:
         # Parallel across all outputs AND all k rounds
         print(f"Running {len(valid_dirs)} outputs × {k} rounds in parallel...")
         tasks = [
-            evaluate_output_async(task_dir, output_dir, client, eval_model, categories, k)
+            evaluate_output_async(task_dir, output_dir, client, eval_model, categories, k, 
+                                  save_per_output, eval_id, replace)
             for output_dir in valid_dirs
         ]
         results_list = await asyncio.gather(*tasks)
@@ -499,13 +618,30 @@ async def evaluate_async(task: str, output_dirs: list[Path], k: int, eval_model:
             for r in all_results_sorted:
                 print(f"    Round {r.get('_round', '?')}: {r.get('total', 0)}")
             
-            results[output_dir.name] = _aggregate_results(all_results, categories, failure_analysis)
+            result = _aggregate_results(all_results, categories, failure_analysis)
+            results[output_dir.name] = result
+            
+            # Save to manifest.json
+            if save_per_output:
+                save_per_output_eval(output_dir, task_dir, result, categories, eval_model, k, 
+                                     eval_id, replace)
     
     return results, categories
 
 
-def evaluate(task: str, output_dirs: list[Path], k: int, eval_model: str) -> dict:
-    """Evaluate outputs k times (synchronous version for backwards compatibility)."""
+def evaluate(task: str, output_dirs: list[Path], k: int, eval_model: str,
+             save_per_output: bool = True, eval_id: str = None, replace: bool = False) -> dict:
+    """Evaluate outputs k times (synchronous version).
+    
+    Args:
+        task: Task name
+        output_dirs: List of output directories to evaluate
+        k: Number of evaluation rounds per output
+        eval_model: Model to use for evaluation
+        save_per_output: If True, update manifest.json with evaluation.
+        eval_id: Optional evaluation ID (auto-generated if not provided).
+        replace: If True and eval_id matches existing, replace it.
+    """
     client = OpenAI()
     task_dir = Path(__file__).parent / task
     _, categories = parse_rubric(task_dir / "rubric.txt")
@@ -546,9 +682,163 @@ def evaluate(task: str, output_dirs: list[Path], k: int, eval_model: str) -> dic
             scores.append(score)
             print(f"  Round {i+1}: {score}")
         
-        results[output_dir.name] = _aggregate_results(all_results, categories, failure_analysis)
+        agg_result = _aggregate_results(all_results, categories, failure_analysis)
+        results[output_dir.name] = agg_result
+        
+        # Save to manifest.json
+        if save_per_output:
+            save_per_output_eval(output_dir, task_dir, agg_result, categories, eval_model, k,
+                                 eval_id, replace)
     
     return results, categories
+
+
+def get_outputs_dir(task: str) -> Path:
+    """Get the outputs directory for a task: outputs/{task}/ at repo root."""
+    repo_root = Path(__file__).parent.parent
+    return repo_root / "outputs" / task
+
+
+def find_all_output_dirs(task: str) -> list[Path]:
+    """Find all output directories for a task."""
+    outputs_dir = get_outputs_dir(task)
+    if not outputs_dir.exists():
+        return []
+    
+    # Flat structure: outputs/{task}/{run}/
+    dirs = []
+    for run_dir in sorted(outputs_dir.iterdir()):
+        if run_dir.is_dir() and not run_dir.name.startswith('.'):
+            if (run_dir / "manifest.json").exists():
+                dirs.append(run_dir)
+    return dirs
+
+
+def load_all_manifests(task: str, output_names: list[str] = None) -> list[dict]:
+    """Load all manifest.json files from agent outputs for meta-analysis.
+    
+    Args:
+        task: Task name
+        output_names: Specific output names to load, or None for all
+        
+    Returns:
+        List of manifest dictionaries, sorted by run_id
+    """
+    if output_names:
+        # Search for specific outputs by name
+        outputs_dir = get_outputs_dir(task)
+        dirs = []
+        for name in output_names:
+            if Path(name).is_absolute():
+                dirs.append(Path(name))
+            else:
+                candidate = outputs_dir / name
+                if candidate.exists():
+                    dirs.append(candidate)
+    else:
+        dirs = find_all_output_dirs(task)
+    
+    manifests = []
+    for output_dir in dirs:
+        manifest_path = output_dir / "manifest.json"
+        if manifest_path.exists():
+            try:
+                manifest = json.loads(manifest_path.read_text())
+                manifests.append(manifest)
+            except:
+                pass
+    
+    return sorted(manifests, key=lambda m: m.get("run_id", ""))
+
+
+# Backwards compatibility alias
+load_all_eval_results = load_all_manifests
+
+
+def load_eval_results_as_dataframe(task: str, output_names: list[str] = None, 
+                                   expand_evals: bool = True):
+    """Load manifests as a pandas DataFrame for analysis.
+    
+    Args:
+        task: Task name
+        output_names: Specific output names to load, or None for all
+        expand_evals: If True, create one row per evaluation (run × eval).
+                      If False, use only the latest evaluation per run.
+    
+    Returns a flattened DataFrame with:
+    - Execution metrics (time, tokens, iterations, etc.)
+    - Evaluation scores (mean, std, per-category)
+    - Failure analysis metrics
+    
+    Requires pandas to be installed.
+    """
+    try:
+        import pandas as pd
+    except ImportError:
+        raise ImportError("pandas required for DataFrame output. Install with: pip install pandas")
+    
+    manifests = load_all_manifests(task, output_names)
+    if not manifests:
+        return pd.DataFrame()
+    
+    rows = []
+    for m in manifests:
+        execution = m.get("execution", {})
+        tokens = execution.get("tokens", {})
+        tool_calls = execution.get("tool_calls", {})
+        
+        # Base row with execution data
+        base_row = {
+            "task": m.get("task"),
+            "run_id": m.get("run_id"),
+            "agent_model": execution.get("agent_model"),
+            "iterations": execution.get("iterations"),
+            "task_completed": execution.get("task_completed"),
+            "duration_seconds": execution.get("duration_seconds"),
+            "prompt_tokens": tokens.get("prompt"),
+            "completion_tokens": tokens.get("completion"),
+            "total_tokens": tokens.get("total"),
+            "tool_calls_total": tool_calls.get("total"),
+            "files_created_count": len(execution.get("files_created", [])),
+        }
+        
+        evaluations = m.get("evaluations", [])
+        if not evaluations:
+            # No evaluations yet - still include the run
+            rows.append(base_row)
+            continue
+        
+        if not expand_evals:
+            evaluations = [evaluations[-1]]  # Latest only
+        
+        for ev in evaluations:
+            row = base_row.copy()
+            score = ev.get("score", {})
+            failure = ev.get("failure_analysis", {})
+            
+            row.update({
+                "eval_id": ev.get("eval_id"),
+                "eval_model": ev.get("eval_model"),
+                "eval_rounds": ev.get("eval_rounds"),
+                "evaluated_at": ev.get("evaluated_at"),
+                "rubric_version": ev.get("rubric_version"),
+                "score_mean": score.get("mean"),
+                "score_std": score.get("std"),
+                "score_max": score.get("max"),
+                "score_normalized": score.get("normalized"),
+                "tool_calls_failed": failure.get("tool_calls_failed", failure.get("failed_calls")),
+                "recovered_failures": failure.get("recovered_failures"),
+                "execution_ok": failure.get("execution_ok"),
+                "force_majeure": failure.get("force_majeure"),
+            })
+            
+            # Add per-category scores
+            for cat_key, cat_data in ev.get("categories", {}).items():
+                row[f"score_{cat_key}"] = cat_data.get("mean")
+            
+            rows.append(row)
+    
+    return pd.DataFrame(rows)
 
 
 def plot_results(results: dict, output_path: str):
@@ -602,30 +892,61 @@ def main():
                         help="Parallelize across outputs (default: only parallelize k rounds per output)")
     parser.add_argument("--sync", action="store_true",
                         help="Use synchronous evaluation (no parallelization, for debugging)")
+    parser.add_argument("--no-per-output", action="store_true",
+                        help="Don't update manifest.json in each output directory")
+    parser.add_argument("--eval-id", type=str, default=None,
+                        help="Custom evaluation ID (default: auto-generated timestamp)")
+    parser.add_argument("--replace", action="store_true",
+                        help="Replace existing evaluation with same eval-id")
     
     args = parser.parse_args()
     task_dir = Path(__file__).parent / args.task
-    agent_output = task_dir / "agent_output"
+    outputs_dir = get_outputs_dir(args.task)
+    save_per_output = not args.no_per_output
     
     # Get output directories
     if args.outputs:
-        output_dirs = [agent_output / o if not Path(o).is_absolute() else Path(o) for o in args.outputs]
-    elif agent_output.exists():
-        output_dirs = sorted(agent_output.iterdir(), key=lambda p: p.name)
+        # Handle specific output names - search in outputs/{task}/{YYYY-MM}/
+        output_dirs = []
+        for o in args.outputs:
+            if Path(o).is_absolute():
+                output_dirs.append(Path(o))
+            else:
+                # Search all month directories for this output name
+                found = False
+                if outputs_dir.exists():
+                    for month_dir in sorted(outputs_dir.iterdir(), reverse=True):
+                        if month_dir.is_dir():
+                            candidate = month_dir / o
+                            if candidate.exists():
+                                output_dirs.append(candidate)
+                                found = True
+                                break
+                if not found:
+                    print(f"Warning: Output '{o}' not found in {outputs_dir}")
     else:
-        print(f"No outputs found in {agent_output}")
+        output_dirs = find_all_output_dirs(args.task)
+    
+    if not output_dirs:
+        print(f"No outputs found in {outputs_dir}")
         return
     
     print(f"Evaluating {len(output_dirs)} outputs ({args.k} rounds each)")
+    if args.eval_id:
+        print(f"Evaluation ID: {args.eval_id}")
+    if save_per_output:
+        print(f"Updating manifest.json in each output directory")
     
     if args.sync:
         print("Using synchronous evaluation (no parallelization)")
-        results, categories = evaluate(args.task, output_dirs, args.k, args.model)
+        results, categories = evaluate(args.task, output_dirs, args.k, args.model, 
+                                        save_per_output, args.eval_id, args.replace)
     else:
         mode = "fully parallel" if args.parallel else "parallel k rounds per output"
         print(f"Using async evaluation ({mode})")
         results, categories = asyncio.run(
-            evaluate_async(args.task, output_dirs, args.k, args.model, args.parallel)
+            evaluate_async(args.task, output_dirs, args.k, args.model, args.parallel, 
+                           save_per_output, args.eval_id, args.replace)
         )
     
     # Determine output directory
@@ -694,6 +1015,22 @@ def main():
             unrecovered = fa.get("usage_failures", 0) - fa.get("recovered_failures", 0)
             if unrecovered > 0:
                 print(f"  ✗  Persistent errors: {unrecovered} (factored into eval)")
+    
+    # Print per-output file locations and meta-analysis help
+    if save_per_output:
+        print(f"\n{'='*60}")
+        print("MANIFEST FILES (for meta-analysis)")
+        print("="*60)
+        for output_dir in output_dirs:
+            manifest_path = output_dir / "manifest.json"
+            if manifest_path.exists():
+                print(f"  {manifest_path}")
+        
+        print(f"\nTo load all results for analysis:")
+        print(f"  from eval import load_all_manifests, load_eval_results_as_dataframe")
+        print(f"  manifests = load_all_manifests('{args.task}')")
+        print(f"  df = load_eval_results_as_dataframe('{args.task}')")
+        print(f"  df = load_eval_results_as_dataframe('{args.task}', expand_evals=True)  # one row per eval")
 
 
 if __name__ == "__main__":

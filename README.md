@@ -80,16 +80,4 @@ export TAMARIND_API_KEY=your_key_here
 export OPENAI_API_KEY=your_key_here
 ```
 
-**Windows (PowerShell):**
-```powershell
-$env:TAMARIND_API_KEY="your_key_here"
-$env:OPENAI_API_KEY="your_key_here"
-```
-
-**Windows (CMD):**
-```cmd
-set TAMARIND_API_KEY=your_key_here
-set OPENAI_API_KEY=your_key_here
-```
-
 For persistent setup, add these to your shell profile (`.bashrc`, `.zshrc`, etc.) or system environment variables.
