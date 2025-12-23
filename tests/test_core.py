@@ -60,11 +60,12 @@ def test_build_evaluator_prompt():
     from prompts import build_evaluator_prompt
     prompt = build_evaluator_prompt(
         question="Test task", rubric_text="Test rubric", output_dir_name="run1",
-        files_json="[]", contents_json="{}", failure_context="",
+        files_json="[]", contents_json="{}", tool_log="Step 1: test()", failure_context="",
         category_format='"test": {"score": 10}', total_max=100
     )
     assert "Test task" in prompt
     assert "Test rubric" in prompt
+    assert "Step 1: test()" in prompt
     assert "execution_ok" in prompt
 
 # === ToolFailureAnalysis Tests ===
