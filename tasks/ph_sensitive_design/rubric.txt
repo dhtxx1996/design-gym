@@ -54,15 +54,15 @@ Criteria (8):
 
       [C] (0 points): Does not perform structure prediction, uses completely wrong prediction method, or does not address structural validation.
 
-  Criterion 6: Confidence-Based Filtering
-    Description: Evaluates filtering of predicted structures based on confidence metrics.
+  Criterion 6: Confidence-Based Filtering and RMSD Check
+    Description: Evaluates filtering of predicted structures based on confidence metrics and structural similarity to the target fold.
     Max Points: 5
     Levels:
-      [A] (5 points): Calculates mean pLDDT scores (or equivalent confidence metric) for each predicted structure and applies appropriate confidence threshold (e.g., mean pLDDT > 70-90 for AlphaFold-like models) to assess prediction quality. The specific threshold should be reasonable for the tool used.
+      [A] (5 points): Calculates mean pLDDT scores (or equivalent confidence metric) and applies appropriate confidence threshold (e.g., mean pLDDT > 70-90). ADDITIONALLY calculates RMSD between the predicted structure and the original scaffold (or target fold) to ensure the design maintains the correct fold (e.g., RMSD < 2.0-2.5 Å).
 
-      [B] (2 points): Calculates confidence metrics but uses unreasonable threshold (e.g., pLDDT > 50 which is too loose, or pLDDT > 98 which is too strict), or applies wrong scale for the tool used.
+      [B] (2 points): Calculates confidence metrics (pLDDT) but does not check RMSD, OR uses unreasonable thresholds for either metric.
 
-      [C] (0 points): Does not calculate confidence metrics (pLDDT), does not filter or assess predictions, uses completely wrong metric, or does not address confidence-based quality control.
+      [C] (0 points): Does not calculate confidence metrics or RMSD, does not filter or assess predictions, or does not address quality control.
 
   Criterion 7: Conceptual Understanding - Why Histidine and Why Buried Networks
     Description: Evaluates understanding of key conceptual principles: why histidine is chosen for pH sensing and why networks must be buried.
