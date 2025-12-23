@@ -52,9 +52,12 @@ const RubricViewer = {
                     <div class="rubric-actions">
                         <textarea 
                             class="rubric-feedback-area" 
+                            id="rubric-feedback-${criterion.key}"
                             placeholder="Add feedback to improve grading for this criterion..."
-                            onblur="FeedbackSystem.submitDirect('rubric', 'criterion:${criterion.key}', this.value)"
                         ></textarea>
+                        <div style="margin-top: 8px; text-align: right;">
+                            <button class="small-btn primary" onclick="RubricViewer.submitRubricFeedback('${criterion.key}')">Submit Feedback</button>
+                        </div>
                     </div>
                 </div>
             `;
@@ -194,6 +197,29 @@ const RubricViewer = {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    },
+
+    submitRubricFeedback(key) {
+        const input = this.container.querySelector(`#rubric-feedback-${key}`);
+        if (!input) return;
+        
+        const suggestion = input.value;
+        if (suggestion && suggestion.trim() !== '') {
+            FeedbackSystem.submitDirect('rubric', `criterion:${key}`, suggestion);
+            
+            // Visual feedback
+            const btnContainer = input.parentElement.querySelector('div');
+            const btn = btnContainer.querySelector('button');
+            const originalText = btn.textContent;
+            btn.textContent = 'Saved!';
+            btn.classList.add('success');
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.classList.remove('success');
+            }, 2000);
+        } else {
+            alert('Please enter some feedback first.');
+        }
     }
 };
 
