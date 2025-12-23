@@ -696,7 +696,7 @@ class AgentTools:
             # Don't fail the tool call if DAG tracking fails
             print(f"[dag] Warning: tracking failed: {e}")
     
-    def execute_tool(self, tool_name: str, arguments: dict, reasoning: str = None, tokens: dict = None) -> str:
+    def execute_tool(self, tool_name: str, arguments: dict, reasoning: str = None, tokens: dict = None, call_id: str = None) -> str:
         import time as _time
         handlers = {
             "read_file": lambda: self.read_file(arguments["path"]),
@@ -720,6 +720,7 @@ class AgentTools:
         is_error = "error" in result.lower()[:200] or "traceback" in result.lower()[:200]
         self.tool_calls.append({
             "idx": len(self.tool_calls),
+            "call_id": call_id,
             "name": tool_name,
             "arguments": arguments,
             "reasoning": reasoning,
@@ -890,7 +891,8 @@ def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", o
                         tool_name, 
                         arguments, 
                         reasoning=reasoning if tool_call == assistant_message.tool_calls[0] else None,
-                        tokens=turn_tokens if tool_call == assistant_message.tool_calls[0] else None
+                        tokens=turn_tokens if tool_call == assistant_message.tool_calls[0] else None,
+                        call_id=tool_call.id
                     )
                     
                     if result.startswith("TASK_COMPLETE:"):
