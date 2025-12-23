@@ -320,6 +320,7 @@ class AgentTools:
         
         # DAG tracking for execution provenance
         self.dag = DAGTracker()
+        self.last_node_id = None
         
     @property
     def tamarind(self) -> TamarindClient:
@@ -678,9 +679,21 @@ class AgentTools:
                     self.dag.add_artifact(f"{tool}_downloaded", artifact_id=dl_id)
                     outputs.append(dl_id)
             
-            # Add function node if we have any i/o
-            if inputs or outputs:
-                self.dag.add_function(tool_name, function_id=func_id)
+            # Always add function node for tools that might have implicit dependencies
+            # (even if no explicit inputs/outputs)
+            should_track = inputs or outputs or tool_name in ["run_python", "read_file"]
+
+            if should_track:
+                if func_id not in self.dag.nodes:
+                    self.dag.add_function(tool_name, function_id=func_id)
+
+                # If no explicit inputs, link from last significant node (implicit dependency)
+                if not inputs and self.last_node_id:
+                    try:
+                        self.dag.add_edge(self.last_node_id, func_id, label="implicit")
+                    except:
+                        pass
+
                 for inp in inputs:
                     try:
                         self.dag.add_edge(inp, func_id)
@@ -691,6 +704,14 @@ class AgentTools:
                         self.dag.add_edge(func_id, out)
                     except:
                         pass
+
+                # Update last node for next implicit link
+                # If outputs exist, the last output is the most relevant result
+                # Otherwise, the function execution itself is the result
+                if outputs:
+                    self.last_node_id = outputs[-1]
+                else:
+                    self.last_node_id = func_id
                         
         except Exception as e:
             # Don't fail the tool call if DAG tracking fails
