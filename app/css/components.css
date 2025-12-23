@@ -1,0 +1,84 @@
+/* Reusable UI Components */
+
+.card {
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1.25rem;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 99px;
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid transparent;
+}
+
+.form-group {
+    margin-bottom: 1.25rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    background: #fff;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+}
+
+textarea.form-control {
+    min-height: 100px;
+    resize: vertical;
+    line-height: 1.5;
+}
+
+/* Specific styling for direct rubric feedback */
+.rubric-feedback-area {
+    width: 100%;
+    margin-top: 0.75rem;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-family: var(--font-sans);
+    font-size: 0.85rem;
+    resize: vertical;
+    background: #fafafa;
+    min-height: 60px;
+    transition: all 0.2s;
+}
+
+.rubric-feedback-area:focus {
+    background: #fff;
+    border-color: var(--primary-color);
+    outline: none;
+}
