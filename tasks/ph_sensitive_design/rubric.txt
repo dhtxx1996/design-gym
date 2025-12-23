@@ -38,9 +38,9 @@ Criteria (8):
     Description: Evaluates redesign of environmental residues around the network using structure-based sequence design.
     Max Points: 17
     Levels:
-      [A] (17 points): Uses a structure-based sequence design / inverse folding method (e.g., ProteinMPNN or equivalent) with scaffold structure as input, constrains the identity of network residues to maintain His, Arg, or Lys at network positions (either by fixing residue identity OR by applying strong positive bias via appropriate constraints), allows surrounding environmental residues to be redesigned, and generates at least one sequence candidate. Generating additional sequences is encouraged but not required for full credit.
+      [A] (17 points): Uses a structure-based sequence design / inverse folding method (e.g., ProteinMPNN or equivalent) with scaffold structure as input, constrains the identity of network residues to maintain His, Arg, or Lys at network positions (either by fixing residue identity OR by applying strong positive bias via appropriate constraints), allows surrounding environmental residues to be redesigned, and **successfully** generates at least one sequence candidate using the tool. **Code must demonstrate correct formatting of constraint/bias parameters.**
 
-      [B] (14 points): Uses an inverse folding method but does not constrain network residue identities (no fixing or biasing), manually mutates only network residues without using inverse folding tool for repacking environmental residues, or uses weak constraints that frequently fail to maintain network residues.
+      [B] (8 points): Uses an inverse folding method but does not constrain network residue identities (no fixing or biasing), or **fails to execute the tool due to incorrect parameter usage (e.g. 400 errors) and relies on mock sequences**, or uses weak constraints that frequently fail to maintain network residues.
 
       [C] (0 points): Does not perform sequence design, or designs sequences that allow network residues to mutate away from required identities (His, Arg, Lys) without any attempt to constrain them.
 
@@ -54,15 +54,13 @@ Criteria (8):
 
       [C] (0 points): Does not perform structure prediction, uses completely wrong prediction method, or does not address structural validation.
 
-  Criterion 6: Confidence-Based Filtering and RMSD Check
-    Description: Evaluates filtering of predicted structures based on confidence metrics and structural similarity to the target fold.
+  Criterion 6: Confidence-Based Filtering, RMSD Check, and Motif Validation
+    Description: Evaluates filtering of predicted structures based on confidence metrics, structural similarity to the target fold, and verification of motif placement.
     Max Points: 5
     Levels:
-      [A] (5 points): Calculates mean pLDDT scores (or equivalent confidence metric) and applies appropriate confidence threshold (e.g., mean pLDDT > 70-90). ADDITIONALLY calculates RMSD between the predicted structure and the original scaffold (or target fold) to ensure the design maintains the correct fold (e.g., RMSD < 2.0-2.5 Å).
-
-      [B] (2 points): Calculates confidence metrics (pLDDT) but does not check RMSD, OR uses unreasonable thresholds for either metric.
-
-      [C] (0 points): Does not calculate confidence metrics or RMSD, does not filter or assess predictions, or does not address quality control.
+      [A] (5 points): Calculates mean pLDDT scores (or equivalent confidence metric) and applies appropriate confidence threshold (e.g., mean pLDDT > 70-90) AND calculates RMSD between the predicted structure and the original scaffold. ADDITIONALLY verifies that the intended motif residues (sequence identity) are present at the correct positions in the predicted structure sequence.
+      [B] (2 points): Calculates confidence metrics (pLDDT) and/or RMSD but fails to verify motif identity/location in the prediction, OR uses unreasonable thresholds for any metric.
+      [C] (0 points): Does not calculate confidence metrics or RMSD, does not verify motif, or does not address quality control.
 
   Criterion 7: Conceptual Understanding - Why Histidine and Why Buried Networks
     Description: Evaluates understanding of key conceptual principles: why histidine is chosen for pH sensing and why networks must be buried.
