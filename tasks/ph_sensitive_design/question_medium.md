@@ -33,7 +33,8 @@ Your solution must demonstrate understanding of the following:
 - His-His hydrogen bonds require appropriate Cβ-Cβ geometry (5-9 Å range)
 - Consider His-Arg and His-Lys networks as alternatives to His-His
 - Use inverse folding tools to redesign around fixed network positions
-- Filter structure predictions by confidence scores (pLDDT)
+- Filter structure predictions by confidence scores (pLDDT) and RMSD to the scaffold
+- Explicitly verify that the designed motif residues (identity and location) are preserved in the predicted structure
 
 ## Deliverables
 

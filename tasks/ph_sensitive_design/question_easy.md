@@ -39,6 +39,7 @@ Use ESMFold via Tamarind API:
 - Predict structure for at least 1 designed sequence
 - Extract pLDDT scores from B-factor column
 - Filter predictions with **mean pLDDT > 80**
+- **Verify Motif**: Confirm that the predicted structure contains the intended motif residues (e.g., His) at the correct network positions.
 
 ## Deliverables
 
