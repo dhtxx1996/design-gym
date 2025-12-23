@@ -140,6 +140,10 @@ FILES PRODUCED:
 
 FILE CONTENTS:
 {contents_json}
+
+TOOL EXECUTION LOG:
+{tool_log}
+
 {failure_context}
 EVALUATION GUIDELINES FOR TOOL FAILURES AND EXECUTION CONDITIONS:
 1. Use the TOOL FAILURE ANALYSIS section as factual telemetry about tool usage and errors.
@@ -174,6 +178,7 @@ def build_evaluator_prompt(
     output_dir_name: str,
     files_json: str,
     contents_json: str,
+    tool_log: str,
     failure_context: str,
     category_format: str,
     total_max: int,
@@ -186,6 +191,7 @@ def build_evaluator_prompt(
         output_dir_name: Name of the agent output directory
         files_json: JSON string of files produced
         contents_json: JSON string of file contents
+        tool_log: String representation of the tool execution trace
         failure_context: Tool failure analysis context (may be empty)
         category_format: JSON format string for scoring categories
         total_max: Maximum total score
@@ -199,6 +205,7 @@ def build_evaluator_prompt(
         output_dir_name=output_dir_name,
         files_json=files_json,
         contents_json=contents_json,
+        tool_log=tool_log,
         failure_context=failure_context,
         category_format=category_format,
         total_max=total_max,

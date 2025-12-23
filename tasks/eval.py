@@ -221,6 +221,46 @@ def load_outputs(output_dir: Path) -> dict:
     return outputs
 
 
+def format_tool_log(output_dir: Path) -> str:
+    """Format tool execution log from agent_log.json."""
+    agent_log_path = output_dir / "agent_log.json"
+    if not agent_log_path.exists():
+        return "(No agent execution log found)"
+    
+    try:
+        log_data = json.loads(agent_log_path.read_text())
+    except:
+        return "(Error reading agent log)"
+    
+    tool_calls = []
+    
+    # We need to reconstruct the sequence of calls
+    # Filter for assistant tool calls and tool outputs
+    
+    current_idx = 0
+    formatted_log = []
+    
+    for entry in log_data:
+        role = entry.get("role", "")
+        
+        if role == "assistant" and entry.get("tool_calls"):
+            for tc in entry["tool_calls"]:
+                func = tc.get("function", {})
+                name = func.get("name", "unknown")
+                args = func.get("arguments", "{}")
+                # Truncate args for display
+                if len(args) > 200:
+                    args = args[:200] + "...}"
+                
+                formatted_log.append(f"Step #{current_idx}: {name}({args})")
+                current_idx += 1
+                
+    if not formatted_log:
+        return "(No tools called)"
+        
+    return "\n".join(formatted_log)
+
+
 def build_failure_context(analysis: ToolFailureAnalysis) -> str:
     """Build context string for the evaluator about tool failures and execution."""
     if analysis.total_tool_calls == 0:
@@ -265,6 +305,7 @@ def _build_eval_prompt(task_dir: Path, output_dir: Path, categories: dict,
     rubric_text, _ = parse_rubric(task_dir / "rubric.txt")
     question = (task_dir / "question.md").read_text()[:3000] if (task_dir / "question.md").exists() else ""
     outputs = load_outputs(output_dir)
+    tool_log_str = format_tool_log(output_dir)
     
     # Build expected JSON format from categories - now with per-category reasoning and navigation links
     if categories:
@@ -291,6 +332,7 @@ def _build_eval_prompt(task_dir: Path, output_dir: Path, categories: dict,
         output_dir_name=output_dir.name,
         files_json=json.dumps(outputs.get('files', []), indent=2),
         contents_json=json.dumps({k: v for k, v in outputs.items() if k not in ['path', 'files']}, indent=2, default=str)[:5000],
+        tool_log=tool_log_str,
         failure_context=failure_context,
         category_format=category_format,
         total_max=total_max,

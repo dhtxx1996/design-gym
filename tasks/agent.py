@@ -594,9 +594,9 @@ class AgentTools:
     def _auto_track_tool(self, tool_name: str, arguments: dict, result: str) -> None:
         """Automatically track tool call in the DAG."""
         try:
-            # Generate unique function ID
-            func_count = len([n for n in self.dag.nodes.values() if n.type == "function"])
-            func_id = f"{tool_name}_{func_count + 1}"
+            # Use the tool call index for consistent ID
+            idx = len(self.tool_calls) - 1
+            func_id = f"{tool_name}_{idx}"
             
             # Skip tracking for some meta tools
             if tool_name in ("list_directory", "task_complete"):
@@ -653,7 +653,6 @@ class AgentTools:
                 
             elif tool_name == "tamarind_submit_job":
                 tool = arguments.get("tool_name", "job")
-                func_id = f"{tool}_{func_count + 1}"
                 # Input is any uploaded file referenced
                 params = arguments.get("params", {})
                 for key, val in params.items():
