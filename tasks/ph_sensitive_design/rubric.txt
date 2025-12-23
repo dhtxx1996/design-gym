@@ -8,11 +8,11 @@ Criteria (8):
     Description: Evaluates the correct identification of buried residues in the scaffold structure suitable for pH sensing.
     Max Points: 15
     Levels:
-      [A] (15 points): Calculates Solvent Accessible Surface Area (SASA) using a standard computational tool or library (e.g., BioPython, FreeSASA, PyRosetta) and uses a relative SASA threshold < 0.25 times the maximum value to select buried core positions.
+      [A] (15 points): Identifies buried core positions using a quantitative method: either (1) Solvent Accessible Surface Area (SASA) with a relative threshold < 0.25 (or equivalent), or (2) a justified geometric method (e.g., Neighbor Vector/Count, distance from surface/center of mass) that effectively excludes surface-exposed residues.
 
-      [B] (8 points): Calculates SASA but uses threshold outside the range of 0.1-0.4 (relative), uses absolute SASA values without normalization to maximum, or includes surface-exposed residues in the core selection.
+      [B] (8 points): Uses a quantitative method (SASA or geometric) but with loose/poorly justified thresholds (e.g., includes partially exposed residues), or uses absolute SASA without normalization, or manually selects residues without a clear systematic criterion.
 
-      [C] (0 points): Does not calculate SASA, identifies surface residues as core positions, or does not address core residue identification.
+      [C] (0 points): Does not identify core residues, uses completely arbitrary selection, or identifies surface residues as core positions.
 
   Criterion 2: Network Position Discovery
     Description: Evaluates discovery of His-containing hydrogen bond network positions using systematic search or geometric analysis methods.
