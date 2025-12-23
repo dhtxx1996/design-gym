@@ -1002,7 +1002,6 @@ def run_agent(task_name: str, max_iterations: int = 20, model: str = "gpt-4o", o
         
         # Placeholders for eval.py
         "evaluations": [],
-        "rubrics": [],
     }
     
     # Count tool calls by name

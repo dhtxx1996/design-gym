@@ -551,7 +551,6 @@ def save_per_output_eval(output_dir: Path, task_dir: Path, eval_result: dict,
             "task": task_dir.name,
             "created_at": datetime.now().isoformat(),
             "evaluations": [],
-            "rubrics": [],
         }
     
     # Build evaluation entry
