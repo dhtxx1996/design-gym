@@ -5,12 +5,12 @@ Notes: The key to a full-score answer is demonstrating a complete understanding 
 Criteria (8):
 
   Criterion 1: Core Residue Identification
-    Description: Evaluates the correct identification of buried residues in the scaffold structure suitable for pH sensing.
+    Description: Evaluates the correct identification of buried residues in the scaffold structure suitable for pH sensing. CRITICAL: The identified residues must be truly buried for the pH sensing mechanism to work.
     Max Points: 15
     Levels:
-      [A] (15 points): Identifies buried core positions using a quantitative method: either (1) Solvent Accessible Surface Area (SASA) with a relative threshold < 0.25 (or equivalent), or (2) a justified geometric method (e.g., Neighbor Vector/Count, distance from surface/center of mass) that effectively excludes surface-exposed residues.
+      [A] (15 points): Identifies buried core positions using a quantitative method: either (1) Solvent Accessible Surface Area (SASA) with a relative threshold < 0.25 (or equivalent), or (2) a justified geometric method (e.g., Neighbor Vector/Count) that effectively excludes surface-exposed residues. The selected residues must be truly buried (e.g. not just "internal" but shielded from solvent) to ensure the necessary pKa shift.
 
-      [B] (8 points): Uses a quantitative method (SASA or geometric) but with loose/poorly justified thresholds (e.g., includes partially exposed residues), or uses absolute SASA without normalization, or manually selects residues without a clear systematic criterion.
+      [B] (8 points): Uses a quantitative method (SASA or geometric) but the resulting selection includes surface-exposed or boundary residues due to loose thresholds, implementation errors (e.g. ignoring chain context), or poor justification.
 
       [C] (0 points): Does not identify core residues, uses completely arbitrary selection, or identifies surface residues as core positions.
 
