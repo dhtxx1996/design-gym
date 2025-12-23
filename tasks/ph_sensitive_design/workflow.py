@@ -47,9 +47,10 @@ import json
 import argparse
 from pathlib import Path
 import numpy as np
-from Bio.PDB import PDBParser, SASA
+from Bio.PDB import PDBParser, SASA, PDBList
 from Bio.SeqUtils import seq1
 from Bio import SeqIO
+import os
 
 # Add parent directory for tamarind_client import
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -67,6 +68,26 @@ MOTIF_PARAMS = {
     "HK": {"types": ["H", "K"], "range": (6.0, 10.0), "optimal": 7.5},
     "HR": {"types": ["H", "R"], "range": (6.0, 10.0), "optimal": 8.0},
 }
+
+def fetch_pdb(pdb_id: str, output_dir: Path) -> Path:
+    """Fetch PDB file from RCSB if not found locally."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pdbl = PDBList()
+    print(f"Downloading PDB {pdb_id}...")
+    # retrieve_pdb_file downloads to pdir, usually as pdbXXXX.ent
+    file_path = pdbl.retrieve_pdb_file(pdb_id, pdir=str(output_dir), file_format='pdb')
+    
+    # Rename .ent to .pdb for compatibility
+    path_obj = Path(file_path)
+    if path_obj.suffix == '.ent':
+        new_path = path_obj.with_suffix('.pdb')
+        # Check if new path exists (maybe from previous run), if so, overwrite or use it
+        if new_path.exists():
+            new_path.unlink()
+        path_obj.rename(new_path)
+        return new_path
+        
+    return path_obj
 
 def parse_structure(pdb_path: str):
     """Parse PDB and map to 0-indexed sequence."""
@@ -267,7 +288,8 @@ def design_around_network(client, pdb_path, sequence, network_indices, pdb_map, 
         "sequence": "".join(target_res[network_indices.index(j)] if j in network_indices else (
             np.random.choice(list("ACDEFGHIKLMNPQRSTVWY")) 
             if np.random.rand() < 0.1 else s
-        ) for j, s in enumerate(mutated_seq))
+        ) for j, s in enumerate(mutated_seq)),
+        "expected_residues": target_res
     } for i in range(num_seqs)], mutated_seq
 
 def predict_structures(client, designs, network_indices, output_dir, max_preds=5, plddt_threshold=80.0):
@@ -300,10 +322,35 @@ def predict_structures(client, designs, network_indices, output_dir, max_preds=5
                 bfactors = [a.bfactor for a in structure.get_atoms()]
                 mean_plddt = np.mean(bfactors)
                 
+                # Check motif in predicted structure
+                model_chain = next(structure[0].get_chains())
+                model_residues = [r for r in model_chain if r.id[0] == ' ']
+                motif_ok = True
+                actual_motif = []
+                expected = d.get("expected_residues", ["H"]*len(network_indices))
+                
+                for idx, exp_res in zip(network_indices, expected):
+                    if idx < len(model_residues):
+                        res_name = seq1(model_residues[idx].resname)
+                        actual_motif.append(res_name)
+                        if res_name != exp_res:
+                            motif_ok = False
+                    else:
+                        motif_ok = False
+                        
                 # Filter by confidence threshold
                 if mean_plddt >= plddt_threshold:
-                    preds.append({**d, "pdb_path": str(pdb_file), "plddt_mean": float(mean_plddt)})
-                    print(f"[Module 4] Design {i}: pLDDT={mean_plddt:.1f} ✓ (passed threshold {plddt_threshold})")
+                    status_icon = "✓" if motif_ok else "⚠ (motif mismatch)"
+                    preds.append({
+                        **d, 
+                        "pdb_path": str(pdb_file), 
+                        "plddt_mean": float(mean_plddt),
+                        "motif_validated": motif_ok,
+                        "structure_motif": actual_motif
+                    })
+                    print(f"[Module 4] Design {i}: pLDDT={mean_plddt:.1f} {status_icon}")
+                    if not motif_ok:
+                        print(f"           Expected {expected} at {network_indices}, got {actual_motif}")
                 else:
                     print(f"[Module 4] Design {i}: pLDDT={mean_plddt:.1f} ✗ (below threshold {plddt_threshold})")
                 continue
@@ -412,15 +459,34 @@ def run_pipeline(pdb_path: str, output_dir: str, **kwargs):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--pdb", default="data/scaffold.pdb")
+    # Default to PDB ID 5L33 as per task instructions
+    p.add_argument("--pdb", default="5L33", help="PDB ID (e.g. 5L33) or path to PDB file")
     p.add_argument("--output", default="output")
     p.add_argument("--sasa-threshold", type=float, default=0.25)
     p.add_argument("--num-designs", type=int, default=2)
     p.add_argument("--max-predictions", type=int, default=5)
     args = p.parse_args()
     
+    # Resolve PDB input
+    pdb_input = args.pdb
+    if os.path.exists(pdb_input):
+        pdb_path = str(Path(pdb_input).resolve())
+    elif len(pdb_input) == 4 and pdb_input.isalnum():
+        # Treat as PDB ID
+        data_dir = Path(__file__).resolve().parent / "data"
+        pdb_path = str(fetch_pdb(pdb_input, data_dir))
+    else:
+        # Fallback to checking if it was the old default path that failed
+        # or just a missing file
+        print(f"File {pdb_input} not found. Attempting to treat as PDB ID...")
+        if len(pdb_input) == 4:
+             data_dir = Path(__file__).resolve().parent / "data"
+             pdb_path = str(fetch_pdb(pdb_input, data_dir))
+        else:
+             raise FileNotFoundError(f"Could not find file or PDB ID: {pdb_input}")
+
     run_pipeline(
-        pdb_path=args.pdb,
+        pdb_path=pdb_path,
         output_dir=args.output,
         **vars(args)
     )
