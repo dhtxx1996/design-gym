@@ -31,6 +31,85 @@ const FeedbackSystem = {
         return '';
     },
 
+    getMetadataForTarget(category, target) {
+        let metadata = '';
+        console.log(`[FeedbackSystem] Getting metadata for ${category} / ${target}`);
+
+        // Helper to parse step index from various formats
+        const getStepIndex = (ref) => {
+            if (typeof ref === 'number') return ref;
+            if (typeof ref === 'string') {
+                const match = ref.match(/_(\d+)$/);
+                if (match) return parseInt(match[1]);
+                if (!isNaN(ref)) return Number(ref);
+            }
+            return -1;
+        };
+
+        // 1. Handle direct step feedback
+        if (target.startsWith('step:')) {
+            const idx = getStepIndex(target.replace('step:', ''));
+            const tool = this.manifest.tool_log?.[idx];
+            console.log(`[FeedbackSystem] Step lookup: idx=${idx}, found=${!!tool}`);
+            
+            if (tool) {
+                metadata += `Context: Step #${idx} (${tool.name})\n`;
+                if (tool.arguments) {
+                    const args = JSON.stringify(tool.arguments);
+                    metadata += `Arguments: ${args.substring(0, 150)}${args.length > 150 ? '...' : ''}\n`;
+                }
+                if (tool.preview) {
+                    metadata += `Output: ${tool.preview}\n`;
+                }
+            }
+        }
+        
+        // 2. Handle rubric feedback (include related steps)
+        if (category === 'rubric' && target.startsWith('criterion:')) {
+            const key = target.replace('criterion:', '');
+            
+            // Basic criterion info
+            const criterion = (this.manifest.rubric?.criteria || []).find(c => c.key === key);
+            console.log(`[FeedbackSystem] Criterion lookup: key=${key}, found=${!!criterion}`);
+            
+            if (criterion) {
+                metadata += `Context: Criterion "${criterion.name}"\n`;
+            }
+
+            // Evaluation info
+            const latestEval = this.manifest.evaluations?.[this.manifest.evaluations.length - 1] || {};
+            const catData = latestEval.categories?.[key];
+            console.log(`[FeedbackSystem] Eval data lookup: found=${!!catData}`);
+            
+            if (catData) {
+                const score = catData.mean !== undefined ? catData.mean : '?';
+                const max = criterion ? criterion.max : '?';
+                metadata += `Score: ${score}/${max}\n`;
+                
+                const reasoning = Array.isArray(catData.reasoning) ? catData.reasoning[0] : catData.reasoning;
+                if (reasoning) {
+                    metadata += `LLM Reasoning: ${reasoning}\n`;
+                }
+
+                // Add info about related steps
+                if (catData.related_steps && catData.related_steps.length > 0) {
+                    metadata += `\nRelated Execution Steps:\n`;
+                    catData.related_steps.forEach(ref => {
+                        const idx = getStepIndex(ref);
+                        const tool = this.manifest.tool_log?.[idx];
+                        if (tool) {
+                            metadata += `- Step #${idx} [${tool.name}]: ${tool.preview || '(no output)'}\n`;
+                        } else {
+                            metadata += `- Step #${idx} (not found in log)\n`;
+                        }
+                    });
+                }
+            }
+        }
+
+        return metadata;
+    },
+
     openForm(category, target = '') {
         const titles = {
             'agent_prompt': 'Improve Agent Prompt',
@@ -97,6 +176,7 @@ const FeedbackSystem = {
         }
 
         const filePath = this.getFilePathForCategory(category);
+        const metadata = this.getMetadataForTarget(category, target);
 
         const feedback = {
             id: Date.now(),
@@ -104,7 +184,8 @@ const FeedbackSystem = {
             target,
             suggestion,
             timestamp: new Date().toISOString(),
-            filePath: filePath || undefined
+            filePath: filePath || undefined,
+            metadata: metadata || undefined
         };
 
         this.feedbacks.push(feedback);
@@ -128,13 +209,16 @@ const FeedbackSystem = {
             filePath = this.getFilePathForCategory('agent_prompt');
         }
 
+        const metadata = this.getMetadataForTarget(category, target);
+
         const feedback = {
             id: Date.now(),
             category,
             target,
             suggestion,
             timestamp: new Date().toISOString(),
-            filePath: filePath || undefined
+            filePath: filePath || undefined,
+            metadata: metadata || undefined
         };
 
         this.feedbacks.push(feedback);
@@ -168,8 +252,14 @@ const FeedbackSystem = {
             if (fb.target) header += ` (${fb.target})`;
             if (fb.filePath) header += `\nTarget File: ${fb.filePath}`;
             
-            return `${header}\n${fb.suggestion}\n`;
-        }).join('\n---\n\n');
+            let content = `${header}\n\nFEEDBACK:\n${fb.suggestion}`;
+            
+            if (fb.metadata) {
+                content += `\n\nMETADATA (Context):\n${fb.metadata}`;
+            }
+            
+            return content;
+        }).join('\n' + '-'.repeat(40) + '\n\n');
 
         textArea.value = consolidated;
     },
