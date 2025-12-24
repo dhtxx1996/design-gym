@@ -18,9 +18,9 @@ Criteria (8):
     Description: Evaluates discovery of His-containing hydrogen bond network positions using systematic search or geometric analysis methods.
     Max Points: 20
     Levels:
-      [A] (20 points): Uses a systematic network search algorithm (e.g., HBNet-like) to search within core positions for His-His, His-Arg, His-Lys pairs/networks, OR uses geometric analysis methods with justified distance/angle criteria (e.g., Cβ-Cβ distances 5.5-8.5 Å for His-His pairs, 6.0-10.0 Å for His-Arg/His-Lys pairs based on literature values) to identify suitable positions for His-containing networks within core residues. Either approach is equally valid.
+      [A] (20 points): Uses a systematic network search algorithm (e.g., HBNet-like) or geometric analysis with justified distance/angle criteria to identify suitable positions. CRITICAL: Includes constraints for: (1) Sequence separation (e.g., |seq_id_1 - seq_id_2| > 10) to ensure tertiary contacts, and (2) Geometric orientation (e.g., Ca-Cb vectors pointing towards each other) to ensure side chains face the motif center. (Bonus: Uses rotamer libraries for packing verification).
 
-      [B] (10 points): Uses systematic or geometric methods but searches all residues instead of restricting to core positions, extracts network information incorrectly, does not verify networks are in core positions, or uses poorly justified distance/angle criteria.
+      [B] (10 points): Uses systematic or geometric methods but fails to apply a sequence separation filter (allows local contacts) or orientation check, searches all residues instead of core, or uses poorly justified distance criteria.
 
       [C] (0 points): Searches for wrong network types (not His-His, His-Arg, His-Lys), uses completely arbitrary criteria without any justification, or does not discover any network positions.
 

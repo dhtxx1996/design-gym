@@ -27,6 +27,9 @@ PRO: 159, SER: 155, THR: 172, TRP: 285, TYR: 263, VAL: 174
 Calculate Cβ-Cβ distances between core residue pairs (use Cα for Glycine). Select pairs suitable for His-containing hydrogen bond networks:
 - His-His pairs: Cβ-Cβ distance **5.5-8.5 Å**
 - His-Arg or His-Lys pairs: Cβ-Cβ distance **6.0-10.0 Å**
+- **Sequence Separation**: Ensure residues are at least **10 positions apart** in the sequence (`|i - j| >= 10`) to target tertiary interactions.
+- **Orientation Check**: Calculate $C\alpha \to C\beta$ vectors. Ensure that the vectors for the selected pair point generally towards each other (positive dot product with the connecting vector) to avoid selecting residues that face away from the interaction site.
+- *(Optional/Advanced)*: Use rotamer libraries to verify that standard side-chain conformations can actually bridge the gap.
 
 ### Step 3: Design Sequences with ProteinMPNN
 Use ProteinMPNN via Tamarind API to redesign the sequence:
