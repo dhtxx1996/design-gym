@@ -512,12 +512,17 @@ class DAGTracker:
             codes = [MPath.MOVETO, MPath.CURVE4, MPath.CURVE4, MPath.CURVE4]
             path = MPath(verts, codes)
             
+            # Implicit edges (from reasoning) get dashed lines
+            linestyle = '--' if edge.label == "implicit" else '-'
+            edgecolor = '#AAAAAA' if edge.label == "implicit" else '#888888'
+
             patch = mpatches.PathPatch(
                 path,
                 facecolor='none',
-                edgecolor='#888888',
+                edgecolor=edgecolor,
                 linewidth=1.2,
                 alpha=0.6,
+                linestyle=linestyle,
             )
             ax.add_patch(patch)
             
