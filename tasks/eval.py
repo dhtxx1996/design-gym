@@ -386,10 +386,19 @@ def _aggregate_results(all_results: list[dict], categories: dict,
     category_scores = {}
     for cat in categories:
         cat_data = [r.get(cat, {}) for r in all_results]
-        cat_scores = [
-            d.get("score", d) if isinstance(d, dict) else d 
-            for d in cat_data
-        ]
+        cat_scores = []
+        for d in cat_data:
+            if isinstance(d, dict):
+                score = d.get("score")
+                # Ensure we have a numeric value, not another dict or None
+                if isinstance(score, (int, float)):
+                    cat_scores.append(score)
+                else:
+                    cat_scores.append(0)
+            elif isinstance(d, (int, float)):
+                cat_scores.append(d)
+            else:
+                cat_scores.append(0)
         cat_reasoning = [
             d.get("reasoning", "") if isinstance(d, dict) else ""
             for d in cat_data
