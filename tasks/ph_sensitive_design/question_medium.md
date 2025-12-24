@@ -32,6 +32,8 @@ Your solution must demonstrate understanding of the following:
 - Buried residues typically have relative SASA < 0.25
 - His-His hydrogen bonds require appropriate Cβ-Cβ geometry (5-9 Å range)
 - Consider His-Arg and His-Lys networks as alternatives to His-His
+- Ensure network residues are separated in sequence (e.g., >10 residues apart) to form tertiary contacts
+- Verify geometric orientation: Ca-Cb vectors should point towards each other (positive dot product with connecting vector)
 - Use inverse folding tools to redesign around fixed network positions
 - Filter structure predictions by confidence scores (pLDDT) and RMSD to the scaffold
 - Explicitly verify that the designed motif residues (identity and location) are preserved in the predicted structure
