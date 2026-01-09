@@ -8,12 +8,21 @@ AI agent for computational biology tasks using Tamarind Bio API.
 # Install
 pip install -e .
 
-# Set API keys
-cp env.example .env
-# Edit .env with your keys:
-#   TAMARIND_API_KEY=your-key-from-tamarind.bio
-#   OPENAI_API_KEY=your-openai-key
+# Set API keys as environment variables
+# On Unix/Linux/Mac:
+export TAMARIND_API_KEY=your-key-from-tamarind.bio
+export OPENAI_API_KEY=your-openai-key
+
+# On Windows (PowerShell):
+# $env:TAMARIND_API_KEY="your-key-from-tamarind.bio"
+# $env:OPENAI_API_KEY="your-openai-key"
+
+# On Windows (CMD):
+# set TAMARIND_API_KEY=your-key-from-tamarind.bio
+# set OPENAI_API_KEY=your-openai-key
 ```
+
+**Note:** Credentials are loaded from environment variables only (no `.env` file needed). This makes cross-platform setup easier. For persistent setup, add these to your shell profile or system environment variables.
 
 ## Run Agent
 

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eval Dashboard - Run Details</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/run-details.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <div class="header-left">
+                <a href="index.html" class="back-link">← Back</a>
+                <h1 id="run-id-title">Run Details</h1>
+            </div>
+            <div class="view-controls">
+                <button id="toggle-serial" class="active">Serial Trace</button>
+                <button id="toggle-dag">DAG View</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="details-layout">
+        <!-- Left Panel: Metadata -->
+        <aside class="panel left-panel">
+            <section id="run-metadata">
+                <h3>Metadata</h3>
+                <div class="meta-content"></div>
+            </section>
+            <section id="prompt-sources">
+                <h3>Prompt Sources</h3>
+                <ul class="source-list"></ul>
+            </section>
+            <section id="consolidated-feedback-section">
+                <div class="section-header">
+                    <h3>Consolidated Feedback</h3>
+                    <button class="small-btn" onclick="FeedbackSystem.copyConsolidatedFeedback()">Copy All</button>
+                </div>
+                <div id="consolidated-feedback-container">
+                    <textarea id="consolidated-feedback-text" readonly placeholder="No feedback collected yet..."></textarea>
+                </div>
+            </section>
+        </aside>
+
+        <!-- Center Panel: Visualization -->
+        <main class="panel center-panel">
+            <div id="serial-view" class="vis-container">
+                <div id="trace-container"></div>
+            </div>
+            <div id="dag-view" class="vis-container hidden">
+                <div id="dag-canvas"></div>
+            </div>
+        </main>
+
+        <!-- Resizer Handle -->
+        <div class="resizer" id="drag-handle"></div>
+
+        <!-- Right Panel: Feedback & Suggestions -->
+        <aside class="panel right-panel">
+            <section id="rubric-section">
+                <h3>Rubric & Grading</h3>
+                <div id="rubric-container"></div>
+            </section>
+            <section id="feedback-section">
+                <h3>Human Feedback</h3>
+                <div id="feedback-form-container"></div>
+            </section>
+            <section id="optimization-section">
+                <h3>Optimization Suggestions</h3>
+                <div id="suggestions-container"></div>
+            </section>
+        </aside>
+    </div>
+
+    <div id="feedback-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Provide Feedback</h3>
+                <button class="close-modal" onclick="FeedbackSystem.closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="modal-context" class="modal-section">
+                    <!-- Context about rubric/step/artifact will be here -->
+                </div>
+                <div class="modal-section">
+                    <label for="modal-feedback-text">Your Suggestion:</label>
+                    <textarea id="modal-feedback-text" class="form-control" placeholder="Describe the specific improvement..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="modal-submit-btn" class="active">Submit Feedback</button>
+                <button onclick="FeedbackSystem.closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/run-loader.js"></script>
+    <script src="js/rubric-viewer.js"></script>
+    <script src="js/trace-viewer.js"></script>
+    <script src="js/dag-renderer.js"></script>
+    <script src="js/feedback-system.js"></script>
+    <script src="js/optimization-engine.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
+

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eval Dashboard - Home</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <div class="header-left">
+                <h1>Pro-Eval Dashboard</h1>
+                <span class="live-indicator"><span class="pulse"></span> Live</span>
+            </div>
+            <nav>
+                <input type="text" id="search-input" placeholder="Search runs...">
+                <select id="task-filter">
+                    <option value="">All Tasks</option>
+                </select>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div id="error-display" class="error hidden"></div>
+        
+        <section id="stats-panel" class="stats-grid">
+            <!-- Stats will be injected here -->
+        </section>
+
+        <section id="run-grid" class="run-grid">
+            <!-- Run cards will be injected here -->
+            <div class="loading">Loading runs...</div>
+        </section>
+    </main>
+
+    <script src="js/run-loader.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
+

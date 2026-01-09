@@ -40,3 +40,6 @@ tmp/
 
 # Environment variables
 .env
+
+# Agent outputs (centralized)
+outputs/
